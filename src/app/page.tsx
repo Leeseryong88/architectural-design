@@ -111,8 +111,9 @@ export default function ProjectListPage() {
   };
 
   return (
-    <div className="max-w-6xl w-full mx-auto p-6 space-y-6">
-      {/* 상단 소개 및 데모 시나리오 안내 */}
+    <div className="flex-1 overflow-y-auto">
+      <div className="max-w-6xl w-full mx-auto p-6 space-y-6">
+        {/* 상단 소개 및 데모 시나리오 안내 */}
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
@@ -292,6 +293,7 @@ export default function ProjectListPage() {
             ))}
           </div>
         )}
+      </div>
       </div>
     </div>
   );
