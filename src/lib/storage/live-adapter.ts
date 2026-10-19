@@ -186,12 +186,15 @@ export class LiveFirebaseRepository implements StorageRepository {
     const pid = bundle.project.id;
     const now = new Date().toISOString();
 
-    const batch = writeBatch(this.db);
-    batch.set(doc(this.db, "projects", pid), {
+    // 1. 부모 프로젝트 문서를 먼저 저장하여 하위 컬렉션 보안 규칙(isProjectOwner)이 즉시 참조할 수 있도록 보장
+    await setDoc(doc(this.db, "projects", pid), {
       ...bundle.project,
       ownerId,
       updatedAt: now,
     });
+
+    // 2. 하위 컬렉션 일괄 저장
+    const batch = writeBatch(this.db);
     batch.set(
       doc(this.db, "projects", pid, "buildings", bundle.building.id),
       { ...bundle.building, ownerId }

@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "generate:demo": "node scripts/generate-demo-assets.mjs"
+    "generate:demo": "node scripts/generate-demo-assets.mjs",
+    "deploy:rules": "node --env-file=.env.local scripts/deploy-firebase-rules.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.0.0",

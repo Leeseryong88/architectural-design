@@ -18,43 +18,53 @@ service cloud.firestore {
 
     // 1. 프로젝트 루트 문서
     match /projects/{projectId} {
-      allow read: if isOwner(resource.data.ownerId);
+      allow get: if isSignedIn() && (resource == null || resource.data.ownerId == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
 
-      // 생성 시: 반드시 본인의 uid가 ownerId여야 하며 필드 개수 제한
+      // 생성 시: 반드시 본인의 uid가 ownerId여야 함
       allow create: if isOwner(request.resource.data.ownerId)
-        && request.resource.data.keys().size() <= 30
         && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
         && request.resource.data.name.size() <= 200;
 
       // 수정 시: 클라이언트의 ownerId 변경 금지
       allow update: if isOwner(resource.data.ownerId)
-        && request.resource.data.ownerId == resource.data.ownerId
-        && request.resource.data.keys().size() <= 30;
+        && request.resource.data.ownerId == resource.data.ownerId;
 
       allow delete: if isOwner(resource.data.ownerId);
 
-      // 2. 하위 컬렉션 (buildings, floors, documents, pages, regions, runs, candidates, zones)
+      // 2. 하위 컬렉션 (buildings, floors, documents, pages, regions, runs, candidates, zones, snapshots)
+      // - writeBatch 생성 시 Firestore 규칙의 get() 20회 제한에 걸리지 않도록
+      //   create/update/delete는 각 하위 문서에 기록된 ownerId로 즉시 검증합니다.
+      // - 컬렉션 전체 조회(list)는 부모 프로젝트 소유권(isProjectOwner)으로 검증합니다.
       match /{subcollection}/{docId} {
-        allow read: if isProjectOwner(projectId);
+        allow get: if isSignedIn() && (
+          resource == null ||
+          resource.data.ownerId == request.auth.uid ||
+          isProjectOwner(projectId)
+        );
+        allow list: if isProjectOwner(projectId) || (isSignedIn() && resource.data.ownerId == request.auth.uid);
 
-        // snapshots(불변 확정본)는 생성 후 수정 불가
-        allow create: if isProjectOwner(projectId)
-          && request.resource.data.ownerId == request.auth.uid
-          && request.resource.data.projectId == projectId;
+        allow create: if isSignedIn()
+          && request.resource.data.ownerId == request.auth.uid;
 
-        allow update: if isProjectOwner(projectId)
+        allow update: if isSignedIn()
           && subcollection != 'snapshots'
-          && request.resource.data.ownerId == resource.data.ownerId
-          && request.resource.data.projectId == resource.data.projectId;
+          && resource.data.ownerId == request.auth.uid
+          && request.resource.data.ownerId == request.auth.uid;
 
-        allow delete: if isProjectOwner(projectId);
+        allow delete: if isSignedIn()
+          && (
+            resource.data.ownerId == request.auth.uid ||
+            isProjectOwner(projectId)
+          );
       }
     }
 
     // 3. 서버 전용 AI 호출 제한 및 동시성 슬롯 컬렉션 (클라이언트 임의 수정 차단)
     match /userAiQuotas/{uid} {
       allow read: if isOwner(uid);
-      allow write: if false; // 오직 서버(Firebase Admin SDK)에서만 트랜잭션으로 갱신
+      allow write: if false;
     }
   }
 }

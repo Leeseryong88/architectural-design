@@ -554,7 +554,10 @@ export function createInitialDemoWorkspaceBundle(
   ownerId = "demo-local-architect"
 ): ProjectWorkspaceBundle {
   const now = "2026-10-19T09:00:00.000Z";
-  const projectId = "proj-demo-seongsu-01";
+  const isLocalDemo = !ownerId || ownerId === "demo-local-architect";
+  const projectId = isLocalDemo
+    ? "proj-demo-seongsu-01"
+    : `proj-demo-${ownerId.slice(0, 12)}`;
   const buildingId = "bldg-demo-main-01";
   const docId = "doc-demo-v1";
   const runId = "run-demo-fixture-01";
