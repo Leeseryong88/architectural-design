@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   AlertTriangle,
   ArrowRight,
@@ -32,6 +33,7 @@ export function ModeAndAuthGate({ children }: { children: React.ReactNode }) {
     sendResetEmail,
     logout,
   } = useAppAuth();
+  const pathname = usePathname();
 
   const autoSaveStatus = useWorkspaceStore((s) => s.autoSaveStatus);
   const autoSaveError = useWorkspaceStore((s) => s.autoSaveError);
@@ -440,7 +442,7 @@ export function ModeAndAuthGate({ children }: { children: React.ReactNode }) {
   return (
     <div className="h-screen flex flex-col bg-slate-50 text-slate-900 overflow-hidden">
       {/* 상단 글로벌 헤더 */}
-      <header className="h-13 bg-slate-900 text-white px-4 py-2.5 flex items-center justify-between border-b border-slate-800 shrink-0">
+      <header className="h-12 bg-slate-900 text-white px-4 py-2.5 flex items-center justify-between border-b border-slate-800 shrink-0">
         <div className="flex items-center gap-4">
           <Link
             href="/"
@@ -451,14 +453,19 @@ export function ModeAndAuthGate({ children }: { children: React.ReactNode }) {
           </Link>
 
           {envConfig.mode === "demo" && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-400/40">
-              데모 모드 (DEMO · 브라우저 IndexedDB 저장 · 외부 AI 미호출)
+            <span
+              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-400/40 cursor-help"
+              title="DEMO · 브라우저 IndexedDB 저장 · 외부 AI 미호출"
+            >
+              데모 모드
             </span>
           )}
 
-          <span className="hidden xl:inline text-xs text-slate-400">
-            도면의 정보를 자동으로 옮겨 적고, 서로 다른 자료의 면적값을 비교하여 검토 시간을 줄입니다 (법정 면적 자동 확정 아님)
-          </span>
+          {pathname === "/" && (
+            <span className="hidden xl:inline text-xs text-slate-400">
+              도면의 정보를 자동으로 옮겨 적고, 서로 다른 자료의 면적값을 비교하여 검토 시간을 줄입니다 (법정 면적 자동 확정 아님)
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-4 text-xs">

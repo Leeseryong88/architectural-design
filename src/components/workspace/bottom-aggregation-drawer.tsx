@@ -22,13 +22,14 @@ import { formatAreaSqm, roundToDecimals } from "@/lib/geometry/planar";
 import {
   AREA_BASIS_LABELS,
   REVIEW_STATUS_LABELS,
-  ROW_TYPE_LABELS,
   type AreaBasisType,
   type ReviewStatus,
-  type RowType,
 } from "@/types/domain";
 
 export type DrawerHeightMode = "collapsed" | "normal" | "expanded";
+
+const QUIET_INPUT =
+  "px-1.5 py-1 rounded-md border border-transparent bg-transparent hover:border-slate-300 hover:bg-white focus:border-blue-500 focus:bg-white focus:outline-none";
 
 export function BottomAggregationDrawer({
   heightMode = "normal",
@@ -48,9 +49,6 @@ export function BottomAggregationDrawer({
   );
   const updateZoneMetaAndInclusion = useWorkspaceStore(
     (s) => s.updateZoneMetaAndInclusion
-  );
-  const removeDeductionFromZone = useWorkspaceStore(
-    (s) => s.removeDeductionFromZone
   );
   const deleteZone = useWorkspaceStore((s) => s.deleteZone);
 
@@ -121,12 +119,12 @@ export function BottomAggregationDrawer({
             onClick={() => handleSelectTab("zones")}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition shrink-0 cursor-pointer ${
               activeSubTab === "zones" && heightMode !== "collapsed"
-                ? "bg-blue-600 text-white shadow-xs"
+                ? "bg-blue-600 text-white shadow-sm"
                 : "text-slate-300 hover:bg-slate-800 hover:text-white"
             }`}
           >
             <ListChecks className="w-3.5 h-3.5" />
-            <span>구역·산입/제외 관리 ({bundle.zones.length})</span>
+            <span>구역표 ({bundle.zones.length})</span>
           </button>
 
           <button
@@ -134,12 +132,12 @@ export function BottomAggregationDrawer({
             onClick={() => handleSelectTab("floors_usages")}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition shrink-0 cursor-pointer ${
               activeSubTab === "floors_usages" && heightMode !== "collapsed"
-                ? "bg-blue-600 text-white shadow-xs"
+                ? "bg-blue-600 text-white shadow-sm"
                 : "text-slate-300 hover:bg-slate-800 hover:text-white"
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>층별·용도별 집계</span>
+            <span>층·용도 집계</span>
           </button>
 
           <button
@@ -147,12 +145,12 @@ export function BottomAggregationDrawer({
             onClick={() => handleSelectTab("buildings")}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition shrink-0 cursor-pointer ${
               activeSubTab === "buildings" && heightMode !== "collapsed"
-                ? "bg-blue-600 text-white shadow-xs"
+                ? "bg-blue-600 text-white shadow-sm"
                 : "text-slate-300 hover:bg-slate-800 hover:text-white"
             }`}
           >
             <Building2 className="w-3.5 h-3.5" />
-            <span>동별 집계·건폐율/용적률</span>
+            <span>건폐율·용적률</span>
           </button>
 
           <button
@@ -160,15 +158,16 @@ export function BottomAggregationDrawer({
             onClick={() => handleSelectTab("issues")}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition shrink-0 cursor-pointer ${
               activeSubTab === "issues" && heightMode !== "collapsed"
-                ? "bg-amber-500 text-slate-950 shadow-xs"
+                ? "bg-amber-500 text-slate-950 shadow-sm"
                 : validationIssues.length > 0
                 ? "bg-amber-500/20 text-amber-300 border border-amber-400/40 hover:bg-amber-500/30"
                 : "text-slate-300 hover:bg-slate-800 hover:text-white"
             }`}
           >
             <ShieldAlert className="w-3.5 h-3.5" />
-            <span>
-              불일치·오류 ({validationIssues.length}건 / 차단 {blockingCount}건)
+            <span title={`확정본 생성 차단 ${blockingCount}건 포함`}>
+              오류 {validationIssues.length}
+              {blockingCount > 0 && ` (차단 ${blockingCount})`}
             </span>
           </button>
         </div>
@@ -374,35 +373,36 @@ export function BottomAggregationDrawer({
                 </form>
               )}
 
-              {/* 구역 테이블 (공제 칩 깨짐 방지 및 원클릭 산정근거 전환 지원) */}
-              <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto shadow-2xs">
-                <table className="w-full border-collapse text-left min-w-[1100px]">
+              {/* 구역 표: 입력칸은 마우스를 올리거나 편집할 때만 테두리 표시 */}
+              <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+                <table className="w-full border-collapse text-left min-w-[980px]">
                   <thead>
-                    <tr className="bg-slate-100/90 text-slate-700 border-b border-slate-200 text-[11px]">
-                      <th className="py-2 px-2.5 w-16">층</th>
-                      <th className="py-2 px-2.5 min-w-[150px]">구역명 · 공제내역</th>
-                      <th className="py-2 px-2.5 min-w-[140px]">용도</th>
-                      <th className="py-2 px-2 w-24">행 구분</th>
-                      <th className="py-2 px-2.5 min-w-[230px]">
-                        산정 근거 선택 (클릭 시 즉시 채택)
+                    <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 text-[11px]">
+                      <th className="py-2 px-2 w-20 font-semibold">층</th>
+                      <th className="py-2 px-2 min-w-[150px] font-semibold">구역명</th>
+                      <th className="py-2 px-2 min-w-[130px] font-semibold">용도</th>
+                      <th
+                        className="py-2 px-2 w-[190px] font-semibold"
+                        title="A. 문서기재 / B. 기하측정 / 직접 입력 중 클릭하여 채택"
+                      >
+                        산정 근거
                       </th>
-                      <th className="py-2 px-2.5 text-right w-28">
-                        C. 채택기준(㎡)
-                      </th>
-                      <th className="py-2 px-2.5 text-right w-32">
-                        바닥면적 반영(㎡)
-                      </th>
-                      <th className="py-2 px-2.5 text-right w-32">
-                        용적률 반영(㎡)
-                      </th>
-                      <th className="py-2 px-2.5 min-w-[260px]">
-                        제외·조정 사유 및 법령 메모
-                      </th>
-                      <th className="py-2 px-2.5 w-28">검토 상태</th>
-                      <th className="py-2 px-2 text-center w-12">삭제</th>
+                      <th className="py-2 px-2 text-right w-28 font-semibold">채택(㎡)</th>
+                      <th className="py-2 px-2 text-right w-32 font-semibold">바닥면적(㎡)</th>
+                      <th className="py-2 px-2 text-right w-32 font-semibold">용적률(㎡)</th>
+                      <th className="py-2 px-2 min-w-[180px] font-semibold">제외·조정 사유</th>
+                      <th className="py-2 px-2 w-24 font-semibold">상태</th>
+                      <th className="py-2 px-1 w-8" />
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200">
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredZones.length === 0 && (
+                      <tr>
+                        <td colSpan={10} className="py-6 text-center text-slate-400">
+                          표시할 구역이 없습니다.
+                        </td>
+                      </tr>
+                    )}
                     {filteredZones.map((z) => {
                       const isSelected = z.id === selectedZoneId;
                       const needsReason =
@@ -410,6 +410,12 @@ export function BottomAggregationDrawer({
                           !z.includeInFloorArea ||
                           !z.includeInFarArea) &&
                         !z.exclusionOrAdjustmentReason.trim();
+
+                      const basisSegments = [
+                        { key: "stated" as const, label: "A", value: z.statedAreaSqm, active: "bg-blue-600 text-white" },
+                        { key: "measured" as const, label: "B", value: z.measuredNetAreaSqm, active: "bg-emerald-600 text-white" },
+                        { key: "manual" as const, label: "직접", value: null, active: "bg-indigo-600 text-white" },
+                      ];
 
                       return (
                         <tr
@@ -422,12 +428,11 @@ export function BottomAggregationDrawer({
                           }}
                           className={`cursor-pointer transition-colors ${
                             isSelected
-                              ? "bg-blue-50/70"
-                              : "hover:bg-slate-50/90"
+                              ? "bg-blue-50/70 shadow-[inset_3px_0_0_#2563eb]"
+                              : "hover:bg-slate-50"
                           }`}
                         >
-                          {/* 층 선택 */}
-                          <td className="py-2 px-2.5 align-top">
+                          <td className="py-1.5 px-2 align-middle">
                             <select
                               value={z.floorId}
                               onClick={(e) => e.stopPropagation()}
@@ -436,7 +441,7 @@ export function BottomAggregationDrawer({
                                   floorId: e.target.value,
                                 })
                               }
-                              className="px-1.5 py-1 border border-slate-300 rounded-md bg-white font-bold text-slate-800"
+                              className={`${QUIET_INPUT} font-bold text-slate-800 cursor-pointer`}
                             >
                               {bundle.floors.map((f) => (
                                 <option key={f.id} value={f.id}>
@@ -446,8 +451,7 @@ export function BottomAggregationDrawer({
                             </select>
                           </td>
 
-                          {/* 구역명 + 깨지지 않는 공제 배지 */}
-                          <td className="py-2 px-2.5 align-top">
+                          <td className="py-1.5 px-2 align-middle">
                             <input
                               type="text"
                               value={z.name}
@@ -457,38 +461,20 @@ export function BottomAggregationDrawer({
                                   name: e.target.value,
                                 })
                               }
-                              className="w-full min-w-[130px] px-2 py-1 border border-slate-300 rounded-md font-semibold text-slate-900 bg-white"
+                              className={`${QUIET_INPUT} w-full font-semibold text-slate-900`}
                             />
                             {z.deductionPolygonsPt.length > 0 && (
-                              <div className="mt-1.5 flex flex-wrap gap-1">
-                                {z.deductionPolygonsPt.map((d) => (
-                                  <span
-                                    key={d.id}
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-medium whitespace-nowrap"
-                                  >
-                                    <span>공제: {d.label}</span>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        void removeDeductionFromZone(
-                                          z.id,
-                                          d.id
-                                        );
-                                      }}
-                                      className="text-rose-500 hover:text-rose-800 font-bold ml-0.5 cursor-pointer"
-                                      title="공제 영역 삭제"
-                                    >
-                                      ×
-                                    </button>
-                                  </span>
-                                ))}
+                              <div
+                                className="px-1.5 text-[10px] text-rose-600 truncate"
+                                title={z.deductionPolygonsPt.map((d) => d.label).join(", ")}
+                              >
+                                공제 {z.deductionPolygonsPt.length}건 ·{" "}
+                                {z.deductionPolygonsPt.map((d) => d.label).join(", ")}
                               </div>
                             )}
                           </td>
 
-                          {/* 용도 */}
-                          <td className="py-2 px-2.5 align-top">
+                          <td className="py-1.5 px-2 align-middle">
                             <input
                               type="text"
                               value={z.usage}
@@ -498,159 +484,91 @@ export function BottomAggregationDrawer({
                                   usage: e.target.value,
                                 })
                               }
-                              className="w-full min-w-[130px] px-2 py-1 border border-slate-300 rounded-md bg-white"
+                              className={`${QUIET_INPUT} w-full text-slate-700`}
                             />
                           </td>
 
-                          {/* 행 구분 */}
-                          <td className="py-2 px-2 align-top">
-                            <select
-                              value={z.rowType}
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={(e) =>
-                                void updateZoneMetaAndInclusion(z.id, {
-                                  rowType: e.target.value as RowType,
-                                })
-                              }
-                              className="px-1.5 py-1 border border-slate-300 rounded-md bg-white"
-                            >
-                              {Object.entries(ROW_TYPE_LABELS).map(([k, v]) => (
-                                <option key={k} value={k}>
-                                  {v}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-
-                          {/* A. 문서기재 vs B. 기하측정 vs 직접입력 원클릭 비교·선택 셀 */}
                           <td
-                            className="py-2 px-2.5 align-top"
+                            className="py-1.5 px-2 align-middle"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <div className="flex items-center gap-1.5">
-                              {/* A. 문서기재 버튼/입력 */}
-                              <div
-                                onClick={() =>
-                                  void updateZoneMetaAndInclusion(z.id, {
-                                    basisType: "stated",
-                                  })
-                                }
-                                className={`flex-1 p-1.5 rounded-lg border transition cursor-pointer ${
-                                  z.basisType === "stated"
-                                    ? "bg-blue-50 border-blue-500 ring-1 ring-blue-500"
-                                    : "bg-slate-50 border-slate-200 hover:border-slate-300"
-                                }`}
-                                title="클릭하여 A. 문서 기재 면적을 기준 면적으로 채택"
-                              >
-                                <div className="text-[10px] text-slate-500 font-semibold flex items-center justify-between">
-                                  <span>A. 문서기재</span>
-                                  {z.basisType === "stated" && (
-                                    <span className="text-blue-600 font-bold">
-                                      채택됨
-                                    </span>
-                                  )}
-                                </div>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  placeholder="미기재"
-                                  value={z.statedAreaSqm ?? ""}
-                                  onClick={(e) => e.stopPropagation()}
-                                  onChange={(e) => {
-                                    const raw = e.target.value.trim();
+                            <div className="inline-flex items-stretch rounded-md border border-slate-200 overflow-hidden text-[11px]">
+                              {basisSegments.map((seg, idx) => (
+                                <button
+                                  key={seg.key}
+                                  type="button"
+                                  onClick={() =>
                                     void updateZoneMetaAndInclusion(z.id, {
-                                      statedAreaSqm:
-                                        raw === "" ? null : Number(raw),
-                                    });
-                                  }}
-                                  className="w-full mt-0.5 px-1 py-0.5 text-right font-mono font-bold text-slate-800 bg-white border border-slate-200 rounded text-[11px]"
-                                />
-                              </div>
-
-                              {/* B. 기하측정 원클릭 선택 카드 */}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  void updateZoneMetaAndInclusion(z.id, {
-                                    basisType: "measured",
-                                  })
-                                }
-                                className={`flex-1 p-1.5 rounded-lg border text-left transition cursor-pointer ${
-                                  z.basisType === "measured"
-                                    ? "bg-emerald-50 border-emerald-500 ring-1 ring-emerald-500"
-                                    : "bg-slate-50 border-slate-200 hover:border-slate-300"
-                                }`}
-                                title="클릭하여 B. 기하 측정 면적을 기준 면적으로 채택"
-                              >
-                                <div className="text-[10px] text-slate-500 font-semibold flex items-center justify-between">
-                                  <span>B. 기하측정</span>
-                                  {z.basisType === "measured" && (
-                                    <span className="text-emerald-700 font-bold">
-                                      채택됨
+                                      basisType: seg.key,
+                                    })
+                                  }
+                                  title={AREA_BASIS_LABELS[seg.key]}
+                                  className={`px-2 py-1 font-semibold transition cursor-pointer ${
+                                    idx > 0 ? "border-l border-slate-200" : ""
+                                  } ${
+                                    z.basisType === seg.key
+                                      ? seg.active
+                                      : "bg-white text-slate-500 hover:bg-slate-100"
+                                  }`}
+                                >
+                                  {seg.label}
+                                  {seg.key !== "manual" && (
+                                    <span className="ml-1 font-mono">
+                                      {seg.value !== null
+                                        ? roundToDecimals(seg.value).toFixed(1)
+                                        : "—"}
                                     </span>
                                   )}
-                                </div>
-                                <div className="mt-1 text-right font-mono font-bold text-emerald-700 text-xs">
-                                  {z.measuredNetAreaSqm !== null
-                                    ? `${roundToDecimals(z.measuredNetAreaSqm).toFixed(2)}`
-                                    : "미측정"}
-                                </div>
-                              </button>
-
-                              {/* 직접 입력 전환 버튼 */}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  void updateZoneMetaAndInclusion(z.id, {
-                                    basisType: "manual",
-                                  })
-                                }
-                                className={`px-2 py-2 rounded-lg border text-[10px] font-semibold transition cursor-pointer ${
-                                  z.basisType === "manual"
-                                    ? "bg-indigo-600 text-white border-indigo-600"
-                                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
-                                }`}
-                                title={AREA_BASIS_LABELS.manual}
-                              >
-                                직접
-                              </button>
+                                </button>
+                              ))}
                             </div>
                           </td>
 
-                          {/* C. 채택 기준 면적 */}
                           <td
-                            className="py-2 px-2.5 text-right font-mono font-bold text-blue-700 align-top"
+                            className="py-1.5 px-2 text-right align-middle font-mono font-bold text-blue-700"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            {z.basisType === "manual" ? (
+                            {z.basisType === "measured" ? (
+                              <span className="px-1.5">
+                                {z.adoptedBaseAreaSqm !== null
+                                  ? roundToDecimals(z.adoptedBaseAreaSqm).toFixed(2)
+                                  : "미산출"}
+                              </span>
+                            ) : (
                               <input
                                 type="number"
                                 step="0.01"
-                                value={z.manualAreaSqm ?? ""}
+                                placeholder="입력"
+                                value={
+                                  (z.basisType === "stated"
+                                    ? z.statedAreaSqm
+                                    : z.manualAreaSqm) ?? ""
+                                }
                                 onChange={(e) => {
                                   const raw = e.target.value.trim();
-                                  void updateZoneMetaAndInclusion(z.id, {
-                                    manualAreaSqm:
-                                      raw === "" ? null : Number(raw),
-                                  });
+                                  const val = raw === "" ? null : Number(raw);
+                                  void updateZoneMetaAndInclusion(
+                                    z.id,
+                                    z.basisType === "stated"
+                                      ? { statedAreaSqm: val }
+                                      : { manualAreaSqm: val }
+                                  );
                                 }}
-                                className="w-20 px-1.5 py-1 text-right border border-blue-400 rounded-md bg-white"
+                                title={
+                                  z.basisType === "stated"
+                                    ? "문서 기재 면적 수정"
+                                    : "직접 입력 면적"
+                                }
+                                className={`${QUIET_INPUT} w-24 text-right`}
                               />
-                            ) : (
-                              <div className="pt-1.5 text-xs">
-                                {z.adoptedBaseAreaSqm !== null
-                                  ? `${roundToDecimals(z.adoptedBaseAreaSqm).toFixed(2)}`
-                                  : "미산출"}
-                              </div>
                             )}
                           </td>
 
-                          {/* 바닥면적 산입 여부 및 부분 조정 수치 */}
                           <td
-                            className="py-2 px-2.5 text-right align-top"
+                            className="py-1.5 px-2 text-right align-middle"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <div className="flex items-center justify-end gap-1.5">
+                            <div className="flex items-center justify-end gap-1">
                               <input
                                 type="checkbox"
                                 checked={z.includeInFloorArea}
@@ -682,17 +600,16 @@ export function BottomAggregationDrawer({
                                     isAdjustedOrExcluded: true,
                                   });
                                 }}
-                                className="w-20 px-1.5 py-1 text-right font-mono border border-slate-300 rounded-md bg-white disabled:bg-slate-100 disabled:text-slate-400"
+                                className={`${QUIET_INPUT} w-24 text-right font-mono disabled:text-slate-300`}
                               />
                             </div>
                           </td>
 
-                          {/* 용적률 산입 여부 및 부분 조정 수치 */}
                           <td
-                            className="py-2 px-2.5 text-right align-top"
+                            className="py-1.5 px-2 text-right align-middle"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <div className="flex items-center justify-end gap-1.5">
+                            <div className="flex items-center justify-end gap-1">
                               <input
                                 type="checkbox"
                                 checked={z.includeInFarArea}
@@ -725,49 +642,35 @@ export function BottomAggregationDrawer({
                                     isAdjustedOrExcluded: true,
                                   });
                                 }}
-                                className="w-20 px-1.5 py-1 text-right font-mono border border-slate-300 rounded-md bg-white disabled:bg-slate-100 disabled:text-slate-400"
+                                className={`${QUIET_INPUT} w-24 text-right font-mono disabled:text-slate-300`}
                               />
                             </div>
                           </td>
 
-                          {/* 제외·조정 사유 및 법령 근거 */}
                           <td
-                            className="py-2 px-2.5 align-top"
+                            className="py-1.5 px-2 align-middle"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <div className="flex items-center gap-1.5">
-                              <input
-                                type="text"
-                                placeholder="제외·조정 사유 입력 (필수)"
-                                value={z.exclusionOrAdjustmentReason}
-                                onChange={(e) =>
-                                  void updateZoneMetaAndInclusion(z.id, {
-                                    exclusionOrAdjustmentReason: e.target.value,
-                                  })
-                                }
-                                className={`flex-1 min-w-[140px] px-2 py-1 border rounded-md ${
-                                  needsReason
-                                    ? "border-red-400 bg-red-50 placeholder:text-red-400"
-                                    : "border-slate-300 bg-white"
-                                }`}
-                              />
-                              <input
-                                type="text"
-                                placeholder="법령 조항/메모"
-                                value={z.statuteLinkOrMemo}
-                                onChange={(e) =>
-                                  void updateZoneMetaAndInclusion(z.id, {
-                                    statuteLinkOrMemo: e.target.value,
-                                  })
-                                }
-                                className="w-32 px-2 py-1 border border-slate-300 rounded-md bg-white"
-                              />
-                            </div>
+                            <input
+                              type="text"
+                              placeholder={needsReason ? "사유 입력 필요" : "—"}
+                              value={z.exclusionOrAdjustmentReason}
+                              onChange={(e) =>
+                                void updateZoneMetaAndInclusion(z.id, {
+                                  exclusionOrAdjustmentReason: e.target.value,
+                                })
+                              }
+                              title={z.statuteLinkOrMemo ? `법령 메모: ${z.statuteLinkOrMemo}` : undefined}
+                              className={
+                                needsReason
+                                  ? "w-full px-1.5 py-1 rounded-md border border-red-300 bg-red-50 placeholder:text-red-500 focus:outline-none focus:border-red-500"
+                                  : `${QUIET_INPUT} w-full text-slate-700 placeholder:text-slate-300`
+                              }
+                            />
                           </td>
 
-                          {/* 검토 상태 (원클릭 토글 + 선택) */}
                           <td
-                            className="py-2 px-2.5 align-top"
+                            className="py-1.5 px-2 align-middle"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <select
@@ -777,12 +680,12 @@ export function BottomAggregationDrawer({
                                   reviewStatus: e.target.value as ReviewStatus,
                                 })
                               }
-                              className={`w-full px-2 py-1 rounded-md font-bold border cursor-pointer ${
+                              className={`w-full px-1.5 py-0.5 rounded-full text-[11px] font-bold border cursor-pointer ${
                                 z.reviewStatus === "confirmed"
-                                  ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                                   : z.reviewStatus === "pending"
-                                  ? "bg-amber-50 text-amber-800 border-amber-300"
-                                  : "bg-slate-100 text-slate-700 border-slate-300"
+                                  ? "bg-amber-50 text-amber-800 border-amber-200"
+                                  : "bg-slate-50 text-slate-600 border-slate-200"
                               }`}
                             >
                               {Object.entries(REVIEW_STATUS_LABELS).map(
@@ -796,13 +699,17 @@ export function BottomAggregationDrawer({
                           </td>
 
                           <td
-                            className="py-2 px-2 text-center align-top"
+                            className="py-1.5 px-1 text-center align-middle"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <button
                               type="button"
-                              onClick={() => void deleteZone(z.id)}
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md cursor-pointer"
+                              onClick={() => {
+                                if (confirm(`[${z.name}] 구역을 삭제할까요?`)) {
+                                  void deleteZone(z.id);
+                                }
+                              }}
+                              className="p-1 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-md cursor-pointer"
                               title="구역 삭제"
                             >
                               <Trash2 className="w-3.5 h-3.5" />

@@ -1,9 +1,4 @@
 import { get, set, del, keys } from "idb-keyval";
-import {
-  createInitialDemoWorkspaceBundle,
-  DEMO_VIRTUAL_PDF_HASH,
-  DEMO_VIRTUAL_PDF_URL,
-} from "@/lib/demo/fixture";
 import type {
   AreaZone,
   Building,
@@ -34,25 +29,14 @@ export class DemoLocalRepository implements StorageRepository {
         typeof k === "string" && k.startsWith(BUNDLE_KEY_PREFIX)
     );
 
-    if (bundleKeys.length === 0) {
-      // 초기 접속 시 데모 예제 프로젝트를 자동 초기화
-      const initial = await this.loadOrResetDemoProject(ownerId);
-      return [
-        {
-          project: initial.project,
-          documentCount: initial.documents.length,
-          unconfirmedCount:
-            initial.candidates.filter((c) => c.reviewStatus === "pending")
-              .length +
-            initial.zones.filter((z) => z.reviewStatus === "pending").length,
-          snapshotCount: initial.snapshots.length,
-        },
-      ];
-    }
-
     const cards: ProjectSummaryCard[] = [];
     for (const key of bundleKeys) {
       const bundle = await get<ProjectWorkspaceBundle>(key);
+      if (bundle?.project.isDemoProject) {
+        // 예제 프로젝트 기능 제거 이전에 저장된 가상 도면 예제 데이터 정리
+        await this.deleteProjectCompletely(ownerId, bundle.project.id);
+        continue;
+      }
       if (bundle && bundle.project.deletionStatus !== "deleting") {
         cards.push({
           project: bundle.project,
@@ -206,14 +190,6 @@ export class DemoLocalRepository implements StorageRepository {
     return bundle;
   }
 
-  async loadOrResetDemoProject(
-    ownerId: string
-  ): Promise<ProjectWorkspaceBundle> {
-    const demoBundle = createInitialDemoWorkspaceBundle(ownerId);
-    await this.saveProjectBundle(ownerId, demoBundle);
-    return demoBundle;
-  }
-
   async deleteProjectCompletely(
     _ownerId: string,
     projectId: string
@@ -254,16 +230,6 @@ export class DemoLocalRepository implements StorageRepository {
     const cached = await get<Uint8Array>(`${FILE_KEY_PREFIX}${doc.storagePath}`);
     if (cached && cached.byteLength > 0) {
       return cached;
-    }
-
-    if (doc.isDemoFixturePdf || doc.documentHash === DEMO_VIRTUAL_PDF_HASH) {
-      const res = await fetch(DEMO_VIRTUAL_PDF_URL);
-      if (!res.ok) {
-        throw new Error("가상 데모 도면 PDF를 불러오지 못했습니다.");
-      }
-      const bytes = new Uint8Array(await res.arrayBuffer());
-      await set(`${FILE_KEY_PREFIX}${doc.storagePath}`, bytes);
-      return bytes;
     }
 
     throw new Error("로컬 저장소에서 해당 도면 PDF 원본을 찾을 수 없습니다.");

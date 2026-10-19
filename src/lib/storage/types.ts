@@ -34,7 +34,6 @@ export interface StorageRepository {
     name: string,
     siteLocation: string
   ): Promise<ProjectWorkspaceBundle>;
-  loadOrResetDemoProject(ownerId: string): Promise<ProjectWorkspaceBundle>;
   deleteProjectCompletely(ownerId: string, projectId: string): Promise<void>;
 
   // 파일 바이너리 저장 및 로드 (PDF 원본 및 스냅샷 출력 파일)

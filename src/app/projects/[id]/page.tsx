@@ -9,10 +9,7 @@ import {
   FileOutput,
   AlertCircle,
   Loader2,
-  Sparkles,
-  PanelLeftClose,
-  PanelLeftOpen,
-  PanelRightClose,
+  Maximize,
   PanelRightOpen,
   Table2,
 } from "lucide-react";
@@ -26,6 +23,22 @@ import {
   type DrawerHeightMode,
 } from "@/components/workspace/bottom-aggregation-drawer";
 import { ExportAndSnapshotTab } from "@/components/workspace/export-and-snapshot-tab";
+
+type LayoutPreset = "drawing" | "review" | "table";
+
+interface StudioLayout {
+  leftCompact: boolean;
+  showRightPanel: boolean;
+  drawerHeightMode: DrawerHeightMode;
+}
+
+const LAYOUT_PRESETS: Record<LayoutPreset, StudioLayout> = {
+  drawing: { leftCompact: true, showRightPanel: false, drawerHeightMode: "collapsed" },
+  review: { leftCompact: true, showRightPanel: true, drawerHeightMode: "collapsed" },
+  table: { leftCompact: true, showRightPanel: false, drawerHeightMode: "expanded" },
+};
+
+const LAYOUT_STORAGE_KEY = "myeonjeok:studio-layout";
 
 export default function ProjectWorkspacePage() {
   const params = useParams<{ id: string }>();
@@ -42,10 +55,37 @@ export default function ProjectWorkspacePage() {
   const [mainTab, setMainTab] = useState<"basic" | "studio" | "export">(
     "studio"
   );
-  const [showLeftPanel, setShowLeftPanel] = useState(true);
-  const [showRightPanel, setShowRightPanel] = useState(true);
-  const [drawerHeightMode, setDrawerHeightMode] =
-    useState<DrawerHeightMode>("normal");
+  const [layout, setLayout] = useState<StudioLayout>(LAYOUT_PRESETS.review);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(LAYOUT_STORAGE_KEY);
+      if (saved) {
+        setLayout({ ...LAYOUT_PRESETS.review, ...JSON.parse(saved) });
+      }
+    } catch {
+      // 저장된 레이아웃이 손상된 경우 기본값 사용
+    }
+  }, []);
+
+  const updateLayout = (patch: Partial<StudioLayout>) => {
+    setLayout((prev) => {
+      const next = { ...prev, ...patch };
+      try {
+        window.localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // 저장 공간 접근 불가 시 무시
+      }
+      return next;
+    });
+  };
+
+  const activePreset: LayoutPreset =
+    layout.drawerHeightMode === "expanded"
+      ? "table"
+      : layout.showRightPanel
+      ? "review"
+      : "drawing";
 
   useEffect(() => {
     if (projectId) {
@@ -81,6 +121,36 @@ export default function ProjectWorkspacePage() {
     );
   }
 
+  const pendingTotal =
+    (aggregation?.unconfirmedCandidateCount ?? 0) +
+    (aggregation?.unconfirmedZoneCount ?? 0);
+
+  const presetButtons: {
+    key: LayoutPreset;
+    label: string;
+    title: string;
+    icon: React.ReactNode;
+  }[] = [
+    {
+      key: "drawing",
+      label: "도면 집중",
+      title: "도면만 크게 보기 (패널 최소화)",
+      icon: <Maximize className="w-3.5 h-3.5" />,
+    },
+    {
+      key: "review",
+      label: "검토",
+      title: "도면 + 우측 검토 패널",
+      icon: <PanelRightOpen className="w-3.5 h-3.5" />,
+    },
+    {
+      key: "table",
+      label: "집계표",
+      title: "하단 구역·집계표를 크게 펼치기",
+      icon: <Table2 className="w-3.5 h-3.5" />,
+    },
+  ];
+
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* 상단 프로젝트 워크스페이스 네비게이션 바 */}
@@ -95,17 +165,9 @@ export default function ProjectWorkspacePage() {
             <span>목록</span>
           </button>
 
-          <div className="flex items-center gap-2 min-w-0">
-            <h1 className="text-sm font-bold text-slate-900 truncate">
-              {bundle.project.name}
-            </h1>
-            {bundle.project.isDemoProject && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[11px] font-semibold shrink-0">
-                <Sparkles className="w-3 h-3" />
-                예제 프로젝트
-              </span>
-            )}
-          </div>
+          <h1 className="text-sm font-bold text-slate-900 truncate">
+            {bundle.project.name}
+          </h1>
         </div>
 
         {/* 중앙: 3개 메인 화면 전환 탭 */}
@@ -115,7 +177,7 @@ export default function ProjectWorkspacePage() {
             onClick={() => setMainTab("basic")}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer ${
               mainTab === "basic"
-                ? "bg-white text-slate-900 shadow-xs"
+                ? "bg-white text-slate-900 shadow-sm"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
@@ -128,17 +190,28 @@ export default function ProjectWorkspacePage() {
             onClick={() => setMainTab("studio")}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer ${
               mainTab === "studio"
-                ? "bg-white text-slate-900 shadow-xs"
+                ? "bg-white text-slate-900 shadow-sm"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
             <FileSearch className="w-3.5 h-3.5" />
-            <span>
-              2. 도면 검토 작업실 (미검토{" "}
-              {(aggregation?.unconfirmedCandidateCount ?? 0) +
-                (aggregation?.unconfirmedZoneCount ?? 0)}{" "}
-              · 오류 {validationIssues.length})
-            </span>
+            <span>2. 도면 검토</span>
+            {pendingTotal > 0 && (
+              <span
+                className="px-1.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-bold"
+                title={`미검토 ${pendingTotal}건`}
+              >
+                {pendingTotal}
+              </span>
+            )}
+            {validationIssues.length > 0 && (
+              <span
+                className="px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold"
+                title={`불일치·오류 ${validationIssues.length}건`}
+              >
+                {validationIssues.length}
+              </span>
+            )}
           </button>
 
           <button
@@ -146,7 +219,7 @@ export default function ProjectWorkspacePage() {
             onClick={() => setMainTab("export")}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer ${
               mainTab === "export"
-                ? "bg-white text-slate-900 shadow-xs"
+                ? "bg-white text-slate-900 shadow-sm"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
@@ -155,66 +228,28 @@ export default function ProjectWorkspacePage() {
           </button>
         </div>
 
-        {/* 우측: 작업실 레이아웃 빠른 전환 버튼 (도면 중심 / 구역·집계 중심) */}
+        {/* 우측: 작업실 보기 모드 프리셋 (도면 집중 / 검토 / 집계표) */}
         {mainTab === "studio" && (
-          <div className="hidden lg:flex items-center gap-1 text-xs">
-            <button
-              type="button"
-              onClick={() => setShowLeftPanel(!showLeftPanel)}
-              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border font-medium transition cursor-pointer ${
-                showLeftPanel
-                  ? "bg-slate-900 text-white border-slate-900"
-                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-              }`}
-              title="좌측 도면 페이지 목록 패널 열기/닫기"
-            >
-              {showLeftPanel ? (
-                <PanelLeftClose className="w-3.5 h-3.5" />
-              ) : (
-                <PanelLeftOpen className="w-3.5 h-3.5" />
-              )}
-              <span>페이지 목록</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowRightPanel(!showRightPanel)}
-              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border font-medium transition cursor-pointer ${
-                showRightPanel
-                  ? "bg-slate-900 text-white border-slate-900"
-                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-              }`}
-              title="우측 구역·AI 후보 검토 패널 열기/닫기"
-            >
-              {showRightPanel ? (
-                <PanelRightClose className="w-3.5 h-3.5" />
-              ) : (
-                <PanelRightOpen className="w-3.5 h-3.5" />
-              )}
-              <span>우측 검토패널</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                setDrawerHeightMode(
-                  drawerHeightMode === "expanded" ? "normal" : "expanded"
-                )
-              }
-              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border font-semibold transition cursor-pointer ${
-                drawerHeightMode === "expanded"
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-              }`}
-              title="하단 구역·산입/제외 집계 시트를 화면 중앙까지 크게 펼치기"
-            >
-              <Table2 className="w-3.5 h-3.5" />
-              <span>
-                {drawerHeightMode === "expanded"
-                  ? "집계표 기본크기"
-                  : "집계표 크게 보기"}
-              </span>
-            </button>
+          <div className="hidden lg:flex items-center gap-1.5 text-xs">
+            <span className="text-[11px] font-semibold text-slate-400">보기</span>
+            <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg">
+              {presetButtons.map((btn) => (
+                <button
+                  key={btn.key}
+                  type="button"
+                  onClick={() => updateLayout(LAYOUT_PRESETS[btn.key])}
+                  title={btn.title}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${
+                    activePreset === btn.key
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  {btn.icon}
+                  <span>{btn.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -246,13 +281,27 @@ export default function ProjectWorkspacePage() {
       {mainTab === "studio" && (
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="flex-1 flex min-h-0 overflow-hidden">
-            {showLeftPanel && <LeftPageSidebar />}
-            <CenterCanvasEditor />
-            {showRightPanel && <RightCandidatePanel />}
+            <LeftPageSidebar
+              compact={layout.leftCompact}
+              onToggleCompact={() =>
+                updateLayout({ leftCompact: !layout.leftCompact })
+              }
+            />
+            <CenterCanvasEditor
+              showRightPanel={layout.showRightPanel}
+              onOpenRightPanel={() => updateLayout({ showRightPanel: true })}
+            />
+            {layout.showRightPanel && (
+              <RightCandidatePanel
+                onClose={() => updateLayout({ showRightPanel: false })}
+              />
+            )}
           </div>
           <BottomAggregationDrawer
-            heightMode={drawerHeightMode}
-            onChangeHeightMode={setDrawerHeightMode}
+            heightMode={layout.drawerHeightMode}
+            onChangeHeightMode={(mode) =>
+              updateLayout({ drawerHeightMode: mode })
+            }
           />
         </div>
       )}

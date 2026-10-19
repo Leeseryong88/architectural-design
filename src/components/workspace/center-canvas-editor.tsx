@@ -5,7 +5,7 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCw,
-  Move,
+  MousePointer2,
   Square,
   Ruler,
   PenTool,
@@ -16,9 +16,16 @@ import {
   Check,
   X,
   Crosshair,
-  ShieldAlert,
+  MoreHorizontal,
+  Hexagon,
+  CircleCheck,
+  AlertTriangle,
+  Info,
+  PanelRightOpen,
+  FileUp,
+  Loader2,
 } from "lucide-react";
-import { useWorkspaceStore } from "@/store/workspace-store";
+import { useWorkspaceStore, type DrawingToolMode } from "@/store/workspace-store";
 import {
   extractPageTextAndPositions,
   getPdfJs,
@@ -36,7 +43,155 @@ import {
 } from "@/lib/geometry/planar";
 import type { BoundingBox, Point2D } from "@/types/domain";
 
-export function CenterCanvasEditor() {
+interface ToolDef {
+  mode: DrawingToolMode;
+  label: string;
+  shortcut: string;
+  icon: React.ReactNode;
+  activeClass: string;
+  title: string;
+}
+
+const PRIMARY_TOOLS: ToolDef[] = [
+  {
+    mode: "pan",
+    label: "선택",
+    shortcut: "V",
+    icon: <MousePointer2 className="w-3.5 h-3.5" />,
+    activeClass: "bg-slate-900 text-white",
+    title: "선택·이동 — 구역 선택 및 꼭짓점 편집",
+  },
+  {
+    mode: "draw_region",
+    label: "작업영역",
+    shortcut: "1",
+    icon: <Square className="w-3.5 h-3.5" />,
+    activeClass: "bg-blue-600 text-white",
+    title: "1단계: 작업영역 지정 (페이지별 복수 축척 지원)",
+  },
+  {
+    mode: "calibrate_scale",
+    label: "축척 보정",
+    shortcut: "2",
+    icon: <Ruler className="w-3.5 h-3.5" />,
+    activeClass: "bg-blue-600 text-white",
+    title: "2단계: 두 점을 찍고 실제 길이를 입력해 축척 보정",
+  },
+  {
+    mode: "draw_zone_outer",
+    label: "구역 작성",
+    shortcut: "3",
+    icon: <PenTool className="w-3.5 h-3.5" />,
+    activeClass: "bg-emerald-600 text-white",
+    title: "3단계: 구역 산정선(외곽 다각형) 작성",
+  },
+  {
+    mode: "draw_zone_deduction",
+    label: "공제",
+    shortcut: "4",
+    icon: <Scissors className="w-3.5 h-3.5" />,
+    activeClass: "bg-rose-600 text-white",
+    title: "4단계: 선택한 구역 내부 공제 영역 작성",
+  },
+];
+
+const SECONDARY_TOOLS: ToolDef[] = [
+  {
+    mode: "verify_scale",
+    label: "축척 검산",
+    shortcut: "",
+    icon: <Crosshair className="w-3.5 h-3.5" />,
+    activeClass: "bg-indigo-600 text-white",
+    title: "다른 치수로 축척 확인",
+  },
+  {
+    mode: "draw_envelope",
+    label: "기준 외곽 지정",
+    shortcut: "",
+    icon: <Hexagon className="w-3.5 h-3.5" />,
+    activeClass: "bg-purple-600 text-white",
+    title: "공간 누락 검사용 기준 외곽 다각형 지정",
+  },
+];
+
+function EmptyDrawingDropzone() {
+  const uploadNewPdfDocument = useWorkspaceStore((s) => s.uploadNewPdfDocument);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFile = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      await uploadNewPdfDocument(file);
+    } catch {
+      // 상단 오류 배너(store.errorMessage)로 안내됨
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="flex-1 flex items-center justify-center p-8 bg-slate-100">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        className="hidden"
+        onChange={(e) => {
+          void handleFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+      <button
+        type="button"
+        disabled={uploading}
+        onClick={() => fileInputRef.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          void handleFile(e.dataTransfer.files?.[0]);
+        }}
+        className={`w-full max-w-xl flex flex-col items-center gap-3 px-8 py-14 rounded-3xl border-2 border-dashed transition cursor-pointer ${
+          dragOver
+            ? "border-blue-500 bg-blue-50"
+            : "border-slate-300 bg-white hover:border-blue-400 hover:bg-blue-50/30"
+        }`}
+      >
+        <span className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-600/25">
+          {uploading ? (
+            <Loader2 className="w-6 h-6 animate-spin" />
+          ) : (
+            <FileUp className="w-6 h-6" />
+          )}
+        </span>
+        <span className="text-base font-bold text-slate-900">
+          {uploading ? "도면을 확인하고 있습니다..." : "도면 PDF를 올려 작업을 시작하세요"}
+        </span>
+        <span className="text-xs text-slate-500">
+          끌어다 놓거나 클릭해서 선택 · 20MB · 30페이지 이하
+        </span>
+      </button>
+    </div>
+  );
+}
+
+const LEGAL_NOTICE =
+  "수동 경계는 사용자가 지정한 산정선입니다(벽 중심선·법정 산정선 자동 확정 아님). 단일 축척 보정은 심한 스캔 왜곡을 자동 복구하지 않습니다.";
+
+export function CenterCanvasEditor({
+  showRightPanel = true,
+  onOpenRightPanel,
+}: {
+  showRightPanel?: boolean;
+  onOpenRightPanel?: () => void;
+}) {
   const bundle = useWorkspaceStore((s) => s.bundle);
   const pdfBytes = useWorkspaceStore((s) => s.pdfBytes);
   const activePageIndex = useWorkspaceStore((s) => s.activePageIndex);
@@ -125,6 +280,11 @@ export function CenterCanvasEditor() {
   const [newDeductionReason, setNewDeductionReason] = useState(
     "내부 보이드/설비샤프트 면적 제외"
   );
+
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const keyHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {});
 
   const activePage = useMemo(
     () => bundle?.pages.find((p) => p.pageIndex === activePageIndex) ?? null,
@@ -223,6 +383,44 @@ export function CenterCanvasEditor() {
     setDraftPointsPt([]);
     setCursorPt(null);
   }, [toolMode, activePageIndex]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => keyHandlerRef.current(e);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (!moreMenuOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (!moreMenuRef.current?.contains(e.target as Node)) {
+        setMoreMenuOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", onMouseDown);
+    return () => window.removeEventListener("mousedown", onMouseDown);
+  }, [moreMenuOpen]);
+
+  // 원문 검색 매칭 결과
+  const matchedSearchItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return pageTexts.filter((t) => t.str.toLowerCase().includes(q));
+  }, [pageTexts, searchQuery]);
+
+  // 작성 중인 다각형 실시간 면적 미리보기
+  const draftPreviewAreaSqm = useMemo(() => {
+    if (
+      draftPointsPt.length < 2 ||
+      !activeRegion?.metersPerPdfPoint ||
+      !cursorPt
+    ) {
+      return null;
+    }
+    const pts = [...draftPointsPt, cursorPt];
+    if (pts.length < 3) return null;
+    return calculatePolygonPlanarAreaSqm(pts, activeRegion.metersPerPdfPoint);
+  }, [draftPointsPt, cursorPt, activeRegion]);
 
   if (!bundle) return null;
 
@@ -390,157 +588,265 @@ export function CenterCanvasEditor() {
     }
   };
 
-  // 원문 검색 매칭 결과
-  const matchedSearchItems = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return [];
-    return pageTexts.filter((t) => t.str.toLowerCase().includes(q));
-  }, [pageTexts, searchQuery]);
+  const hasOpenDialog =
+    pendingRegionRectPt !== null ||
+    pendingScalePairPt !== null ||
+    pendingZonePolyPt !== null ||
+    pendingDeductionPolyPt !== null;
 
-  // 작성 중인 다각형 실시간 면적 미리보기
-  const draftPreviewAreaSqm = useMemo(() => {
+  keyHandlerRef.current = (e: KeyboardEvent) => {
+    const target = e.target as HTMLElement | null;
     if (
-      draftPointsPt.length < 2 ||
-      !activeRegion?.metersPerPdfPoint ||
-      !cursorPt
+      target &&
+      (target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable)
     ) {
-      return null;
+      return;
     }
-    const pts = [...draftPointsPt, cursorPt];
-    if (pts.length < 3) return null;
-    return calculatePolygonPlanarAreaSqm(pts, activeRegion.metersPerPdfPoint);
-  }, [draftPointsPt, cursorPt, activeRegion]);
+    if (hasOpenDialog) return;
+
+    const mod = e.ctrlKey || e.metaKey;
+    const key = e.key.toLowerCase();
+    if (mod && key === "z") {
+      e.preventDefault();
+      void (e.shiftKey ? redoGeometry() : undoGeometry());
+      return;
+    }
+    if (mod && key === "y") {
+      e.preventDefault();
+      void redoGeometry();
+      return;
+    }
+    if (mod || e.altKey) return;
+
+    switch (key) {
+      case "escape":
+        if (draftPointsPt.length > 0) setDraftPointsPt([]);
+        else setToolMode("pan");
+        break;
+      case "enter":
+        if (draftPointsPt.length >= 3) finishPolygonDraft();
+        break;
+      case "v":
+        setToolMode("pan");
+        break;
+      case "1":
+        setToolMode("draw_region");
+        break;
+      case "2":
+        setToolMode("calibrate_scale");
+        break;
+      case "3":
+        setToolMode("draw_zone_outer");
+        break;
+      case "4":
+        setToolMode("draw_zone_deduction");
+        break;
+      case "+":
+      case "=":
+        setZoom(zoom + 0.15);
+        break;
+      case "-":
+        setZoom(zoom - 0.15);
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
+  };
+
+  const selectedZone =
+    pageZones.find((z) => z.id === selectedZoneId) ?? null;
+
+  const stepDone: Partial<Record<DrawingToolMode, boolean>> = {
+    draw_region: pageRegions.length > 0,
+    calibrate_scale: Boolean(activeRegion?.metersPerPdfPoint),
+    draw_zone_outer: pageZones.some((z) => z.outerPolygonPt.length >= 3),
+  };
+
+  const isDrawingTool =
+    toolMode === "draw_zone_outer" ||
+    toolMode === "draw_zone_deduction" ||
+    toolMode === "draw_envelope" ||
+    toolMode === "calibrate_scale" ||
+    toolMode === "verify_scale";
+
+  const toolGuide = (() => {
+    const n = draftPointsPt.length;
+    switch (toolMode) {
+      case "pan":
+        return selectedZone
+          ? `[${selectedZone.name}] 선택됨 · 꼭짓점 드래그: 이동 · 변 중점 클릭: 추가 · 꼭짓점 더블클릭: 삭제`
+          : "구역을 클릭해 선택하세요. 숫자키 1~4로 작업 단계를 바로 고를 수 있습니다.";
+      case "draw_region":
+        return n === 0
+          ? "작업영역의 첫 번째 모서리를 클릭하세요."
+          : "반대쪽 모서리를 클릭하면 작업영역이 만들어집니다.";
+      case "calibrate_scale":
+        if (!activeRegion) return "먼저 1단계 작업영역을 지정하세요.";
+        return n === 0
+          ? "실제 길이를 아는 치수선의 시작점을 클릭하세요."
+          : "치수선의 끝점을 클릭하면 실제 길이를 입력합니다.";
+      case "verify_scale":
+        if (!activeRegion) return "먼저 1단계 작업영역을 지정하세요.";
+        return n === 0
+          ? "검산할 다른 치수선의 시작점을 클릭하세요."
+          : "끝점을 클릭하면 기대 길이를 입력합니다.";
+      case "draw_zone_outer":
+        if (!activeRegion) return "먼저 1단계 작업영역을 지정하세요.";
+        return n < 3
+          ? "구역 외곽 꼭짓점을 차례로 클릭하세요."
+          : "시작점을 다시 클릭하거나 Enter로 다각형을 닫습니다.";
+      case "draw_zone_deduction":
+        if (!selectedZoneId)
+          return "공제할 대상 구역을 먼저 클릭해 선택하세요.";
+        return n < 3
+          ? "공제할 영역의 꼭짓점을 차례로 클릭하세요."
+          : "시작점을 다시 클릭하거나 Enter로 공제 영역을 닫습니다.";
+      case "draw_envelope":
+        return n < 3
+          ? "공간 누락 검사용 기준 외곽 꼭짓점을 차례로 클릭하세요."
+          : "시작점을 다시 클릭하거나 Enter로 닫습니다.";
+      default:
+        return "";
+    }
+  })();
+
+  const activeSecondaryTool = SECONDARY_TOOLS.find((t) => t.mode === toolMode);
+
+  const renderToolButton = (tool: ToolDef) => {
+    const isActive = toolMode === tool.mode;
+    const done = stepDone[tool.mode];
+    return (
+      <button
+        key={tool.mode}
+        type="button"
+        onClick={() => setToolMode(tool.mode)}
+        title={`${tool.title}${tool.shortcut ? ` (단축키 ${tool.shortcut})` : ""}`}
+        className={`relative inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-semibold transition cursor-pointer ${
+          isActive ? tool.activeClass : "text-slate-600 hover:bg-white hover:text-slate-900"
+        }`}
+      >
+        {tool.icon}
+        <span>{tool.label}</span>
+        {done && !isActive && (
+          <CircleCheck className="w-3 h-3 text-emerald-600" aria-label="완료" />
+        )}
+      </button>
+    );
+  };
 
   return (
     <section className="flex-1 flex flex-col bg-slate-100 min-w-0 relative overflow-hidden">
-      {/* 상단 도면 편집 툴바 */}
-      <div className="bg-white border-b border-slate-200 px-3 py-2 flex flex-wrap items-center justify-between gap-2 shrink-0">
-        <div className="flex flex-wrap items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setToolMode("pan")}
-            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition ${
-              toolMode === "pan"
-                ? "bg-slate-900 text-white"
-                : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-            }`}
-          >
-            <Move className="w-3.5 h-3.5" />
-            <span>선택·이동</span>
-          </button>
+      {/* 상단 도면 편집 툴바 (한 줄: 단계별 도구 · 보기 조절) */}
+      <div className="bg-white border-b border-slate-200 px-2.5 py-1.5 flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg">
+            {PRIMARY_TOOLS.map(renderToolButton)}
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setToolMode("draw_region")}
-            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition ${
-              toolMode === "draw_region"
-                ? "bg-blue-600 text-white"
-                : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-            }`}
-          >
-            <Square className="w-3.5 h-3.5" />
-            <span>1. 작업영역 지정</span>
-          </button>
+          <div className="relative" ref={moreMenuRef}>
+            <button
+              type="button"
+              onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+              className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                activeSecondaryTool
+                  ? activeSecondaryTool.activeClass
+                  : moreMenuOpen
+                  ? "bg-slate-200 text-slate-900"
+                  : "text-slate-600 hover:bg-slate-100"
+              }`}
+              title="추가 도구 및 보조 설정"
+            >
+              {activeSecondaryTool ? (
+                <>
+                  {activeSecondaryTool.icon}
+                  <span>{activeSecondaryTool.label}</span>
+                </>
+              ) : (
+                <MoreHorizontal className="w-4 h-4" />
+              )}
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setToolMode("calibrate_scale")}
-            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition ${
-              toolMode === "calibrate_scale"
-                ? "bg-blue-600 text-white"
-                : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-            }`}
-          >
-            <Ruler className="w-3.5 h-3.5" />
-            <span>2. 축척 보정(두 점)</span>
-          </button>
+            {moreMenuOpen && (
+              <div className="absolute left-0 top-full mt-1 w-56 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 z-30 text-xs">
+                <div className="px-2 pt-1 pb-1.5 text-[10px] font-semibold text-slate-400">
+                  추가 도구
+                </div>
+                {SECONDARY_TOOLS.map((tool) => (
+                  <button
+                    key={tool.mode}
+                    type="button"
+                    onClick={() => {
+                      setToolMode(tool.mode);
+                      setMoreMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left cursor-pointer ${
+                      toolMode === tool.mode
+                        ? "bg-slate-900 text-white"
+                        : "text-slate-700 hover:bg-slate-100"
+                    }`}
+                    title={tool.title}
+                  >
+                    {tool.icon}
+                    <span className="font-semibold">{tool.label}</span>
+                  </button>
+                ))}
 
-          <button
-            type="button"
-            onClick={() => setToolMode("verify_scale")}
-            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition ${
-              toolMode === "verify_scale"
-                ? "bg-indigo-600 text-white"
-                : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-            }`}
-            title="다른 치수로 축척 확인"
-          >
-            <Crosshair className="w-3.5 h-3.5" />
-            <span>축척 검산</span>
-          </button>
+                <div className="my-1.5 border-t border-slate-100" />
+                <div className="px-2 pb-1.5 text-[10px] font-semibold text-slate-400">
+                  작성 보조
+                </div>
+                <label className="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-slate-100 cursor-pointer text-slate-700">
+                  <span>직교 보조 (Shift 누른 채 작성)</span>
+                  <input
+                    type="checkbox"
+                    checked={orthogonalLock}
+                    onChange={(e) => setOrthogonalLock(e.target.checked)}
+                    className="rounded border-slate-300"
+                  />
+                </label>
+                <label
+                  className="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-slate-100 cursor-pointer text-slate-700"
+                  title="사용자가 작성한 꼭짓점에 스냅 (원본 PDF 선 자동 스냅은 제외)"
+                >
+                  <span>꼭짓점 스냅</span>
+                  <input
+                    type="checkbox"
+                    checked={snapEnabled}
+                    onChange={(e) => setSnapEnabled(e.target.checked)}
+                    className="rounded border-slate-300"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void rotateActivePage(90)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-slate-700 hover:bg-slate-100 cursor-pointer"
+                  title="화면 표시만 회전합니다 (저장 좌표 불변)"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                  <span>화면 90° 회전</span>
+                </button>
 
-          <button
-            type="button"
-            onClick={() => setToolMode("draw_zone_outer")}
-            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition ${
-              toolMode === "draw_zone_outer"
-                ? "bg-emerald-600 text-white"
-                : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-            }`}
-          >
-            <PenTool className="w-3.5 h-3.5" />
-            <span>3. 구역 산정선 작성</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setToolMode("draw_zone_deduction")}
-            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition ${
-              toolMode === "draw_zone_deduction"
-                ? "bg-rose-600 text-white"
-                : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-            }`}
-          >
-            <Scissors className="w-3.5 h-3.5" />
-            <span>4. 내부 공제 작성</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setToolMode("draw_envelope")}
-            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition ${
-              toolMode === "draw_envelope"
-                ? "bg-purple-600 text-white"
-                : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-            }`}
-            title="공간 누락 검사용 기준 외곽 다각형 지정"
-          >
-            <span>기준 외곽 지정</span>
-          </button>
+                <div className="my-1.5 border-t border-slate-100" />
+                <div className="px-2 py-1 text-[10px] leading-relaxed text-slate-400">
+                  단축키: V 선택 · 1~4 단계 도구 · Enter 닫기 · Esc 취소 · Ctrl+Z / Ctrl+Y · +/- 확대·축소
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* 보조 옵션: 직교 보조, 꼭짓점 스냅, Undo/Redo, 확대/축소/회전, 원문 검색 */}
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="inline-flex items-center gap-1 text-xs text-slate-700 cursor-pointer px-2 py-1 rounded bg-slate-100">
-            <input
-              type="checkbox"
-              checked={orthogonalLock}
-              onChange={(e) => setOrthogonalLock(e.target.checked)}
-              className="rounded border-slate-300"
-            />
-            <span>직교(Shift)</span>
-          </label>
-
-          <label
-            className="inline-flex items-center gap-1 text-xs text-slate-700 cursor-pointer px-2 py-1 rounded bg-slate-100"
-            title="사용자가 작성한 꼭짓점에 스냅 (원본 PDF 선 자동 스냅은 제외)"
-          >
-            <input
-              type="checkbox"
-              checked={snapEnabled}
-              onChange={(e) => setSnapEnabled(e.target.checked)}
-              className="rounded border-slate-300"
-            />
-            <span>꼭짓점 스냅</span>
-          </label>
-
-          <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center rounded-lg border border-slate-200 overflow-hidden">
             <button
               type="button"
               disabled={undoStack.length === 0}
               onClick={() => void undoGeometry()}
-              className="p-1.5 bg-white hover:bg-slate-100 disabled:opacity-40 text-slate-700"
-              title="실행 취소 (Undo)"
+              className="p-1.5 bg-white hover:bg-slate-100 disabled:opacity-40 text-slate-700 cursor-pointer"
+              title="실행 취소 (Ctrl+Z)"
             >
               <Undo2 className="w-3.5 h-3.5" />
             </button>
@@ -548,137 +854,216 @@ export function CenterCanvasEditor() {
               type="button"
               disabled={redoStack.length === 0}
               onClick={() => void redoGeometry()}
-              className="p-1.5 bg-white hover:bg-slate-100 disabled:opacity-40 text-slate-700 border-l border-slate-200"
-              title="다시 실행 (Redo)"
+              className="p-1.5 bg-white hover:bg-slate-100 disabled:opacity-40 text-slate-700 border-l border-slate-200 cursor-pointer"
+              title="다시 실행 (Ctrl+Y)"
             >
               <Redo2 className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden text-xs">
+          <div className="flex items-center rounded-lg border border-slate-200 overflow-hidden text-xs">
             <button
               type="button"
               onClick={() => setZoom(zoom - 0.15)}
-              className="p-1.5 bg-white hover:bg-slate-100 text-slate-700"
-              title="축소"
+              className="p-1.5 bg-white hover:bg-slate-100 text-slate-700 cursor-pointer"
+              title="축소 (-)"
             >
               <ZoomOut className="w-3.5 h-3.5" />
             </button>
-            <span className="px-2 font-mono text-[11px]">
+            <button
+              type="button"
+              onClick={() => setZoom(1)}
+              className="px-1.5 font-mono text-[11px] text-slate-700 hover:bg-slate-100 min-w-[44px] cursor-pointer"
+              title="100%로 되돌리기"
+            >
               {Math.round(zoom * 100)}%
-            </span>
+            </button>
             <button
               type="button"
               onClick={() => setZoom(zoom + 0.15)}
-              className="p-1.5 bg-white hover:bg-slate-100 text-slate-700"
-              title="확대"
+              className="p-1.5 bg-white hover:bg-slate-100 text-slate-700 cursor-pointer"
+              title="확대 (+)"
             >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
-            <button
-              type="button"
-              onClick={() => void rotateActivePage(90)}
-              className="p-1.5 bg-white hover:bg-slate-100 text-slate-700 border-l border-slate-200"
-              title="화면 표시 90° 회전 (저장 좌표 불변)"
-            >
-              <RotateCw className="w-3.5 h-3.5" />
-            </button>
           </div>
 
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="페이지 내 원문 검색..."
-              className="pl-7 pr-2.5 py-1 text-xs border border-slate-300 rounded-lg w-40"
-            />
-          </div>
+          {searchOpen || searchQuery ? (
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                autoFocus
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onBlur={() => setSearchOpen(false)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setSearchQuery("");
+                    setSearchOpen(false);
+                  }
+                }}
+                placeholder="페이지 내 원문 검색"
+                className="pl-7 pr-12 py-1 text-xs border border-slate-300 rounded-lg w-48 focus:outline-none focus:border-blue-500"
+              />
+              {searchQuery && (
+                <span className="absolute right-6 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">
+                  {matchedSearchItems.length}건
+                </span>
+              )}
+              {searchQuery && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                  title="검색어 지우기"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 cursor-pointer"
+              title="페이지 내 원문 검색"
+            >
+              <Search className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {!showRightPanel && onOpenRightPanel && (
+            <button
+              type="button"
+              onClick={onOpenRightPanel}
+              className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 cursor-pointer"
+              title="우측 검토 패널 열기"
+            >
+              <PanelRightOpen className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* 현재 작업 영역 & 축척 상태 안내 바 */}
-      <div className="bg-slate-800 text-slate-200 px-3.5 py-1.5 text-xs flex flex-wrap items-center justify-between gap-2 shrink-0">
-        <div className="flex flex-wrap items-center gap-3">
-          <span>
-            현재 페이지: <strong>P.{activePageIndex}</strong> (기재 축척 참고값:{" "}
-            <strong className="text-amber-300">
-              {activePage?.statedScaleText || "미기재"}
-            </strong>
-            )
+      {/* 작업 맥락 & 다음 행동 안내 바 */}
+      <div
+        className={`px-3 py-1.5 text-xs flex flex-wrap items-center justify-between gap-2 shrink-0 border-b ${
+          toolMode === "pan"
+            ? "bg-slate-50 border-slate-200 text-slate-600"
+            : "bg-blue-50 border-blue-200 text-blue-900"
+        }`}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className="px-1.5 py-0.5 rounded bg-slate-900 text-white font-bold text-[11px] shrink-0"
+            title={`도면 기재 축척 참고값: ${activePage?.statedScaleText || "미기재"}`}
+          >
+            P.{activePageIndex}
           </span>
 
-          <div className="flex items-center gap-1.5">
-            <span>작업영역:</span>
+          {pageRegions.length > 1 ? (
             <select
               value={activeRegion?.id ?? ""}
               onChange={(e) => setSelectedRegionId(e.target.value || null)}
-              className="bg-slate-900 text-white border border-slate-700 rounded px-2 py-0.5 text-xs"
+              className="px-1.5 py-0.5 border border-slate-300 rounded bg-white text-[11px] font-medium text-slate-800 max-w-[160px]"
+              title="작업영역 선택"
             >
-              {pageRegions.length === 0 ? (
-                <option value="">지정된 작업영역 없음</option>
-              ) : (
-                pageRegions.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))
-              )}
+              {pageRegions.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
             </select>
-          </div>
-
-          {activeRegion && (
-            <span className="text-[11px]">
-              {activeRegion.metersPerPdfPoint ? (
-                <span className="text-emerald-300 font-semibold">
-                  ✓ 보정 축척: 1 pt = {activeRegion.metersPerPdfPoint.toFixed(4)} m
-                  {activeRegion.verificationMeasurement &&
-                    ` (검산 오차: ${activeRegion.verificationMeasurement.diffM.toFixed(
-                      3
-                    )}m)`}
-                </span>
-              ) : (
-                <span className="text-amber-300 font-semibold">
-                  ⚠ 축척 미보정 (보정 전 측정 면적 확정 불가)
-                </span>
-              )}
+          ) : activeRegion ? (
+            <span className="text-[11px] font-medium text-slate-700 truncate max-w-[160px]">
+              {activeRegion.name}
             </span>
-          )}
-        </div>
-
-        {/* 다각형 작성 중일 때 닫기 / 취소 버튼 */}
-        {draftPointsPt.length > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-amber-300 font-semibold">
-              점 {draftPointsPt.length}개 선택됨
-              {draftPreviewAreaSqm !== null &&
-                ` (예상 ${draftPreviewAreaSqm.toFixed(2)} ㎡)`}
-            </span>
-            {draftPointsPt.length >= 3 && (
-              <button
-                type="button"
-                onClick={finishPolygonDraft}
-                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
-              >
-                <Check className="w-3 h-3" />
-                다각형 닫기·완료
-              </button>
-            )}
+          ) : (
             <button
               type="button"
-              onClick={() => setDraftPointsPt([])}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-200"
+              onClick={() => setToolMode("draw_region")}
+              className="text-[11px] font-semibold text-blue-700 hover:underline cursor-pointer shrink-0"
             >
-              <X className="w-3 h-3" />
-              작성 취소
+              + 작업영역 지정
             </button>
-          </div>
-        )}
+          )}
+
+          {activeRegion &&
+            (activeRegion.metersPerPdfPoint ? (
+              <span
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold shrink-0"
+                title={`1 pt = ${activeRegion.metersPerPdfPoint.toFixed(4)} m${
+                  activeRegion.verificationMeasurement
+                    ? ` · 검산 오차 ${activeRegion.verificationMeasurement.diffM.toFixed(3)} m`
+                    : ""
+                }`}
+              >
+                <CircleCheck className="w-3 h-3" />
+                축척 보정됨
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setToolMode("calibrate_scale")}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 border border-amber-300 text-amber-800 text-[11px] font-semibold hover:bg-amber-100 shrink-0 cursor-pointer"
+                title="보정 전에는 측정 면적을 확정할 수 없습니다. 클릭하여 축척 보정 시작"
+              >
+                <AlertTriangle className="w-3 h-3" />
+                축척 미보정 · 보정하기
+              </button>
+            ))}
+
+          <span className="text-slate-300 shrink-0">|</span>
+          <span className="truncate" title={toolGuide}>
+            {toolGuide}
+            {isDrawingTool && draftPointsPt.length > 0 && " (Shift: 직교 · Esc: 취소)"}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {draftPointsPt.length > 0 && (
+            <>
+              <span className="font-semibold text-amber-700">
+                점 {draftPointsPt.length}개
+                {draftPreviewAreaSqm !== null &&
+                  ` · 예상 ${draftPreviewAreaSqm.toFixed(2)} ㎡`}
+              </span>
+              {draftPointsPt.length >= 3 && (
+                <button
+                  type="button"
+                  onClick={finishPolygonDraft}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold cursor-pointer"
+                >
+                  <Check className="w-3 h-3" />
+                  닫기·완료
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setDraftPointsPt([])}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 cursor-pointer"
+              >
+                <X className="w-3 h-3" />
+                취소
+              </button>
+            </>
+          )}
+          <span className="text-slate-400 cursor-help" title={LEGAL_NOTICE}>
+            <Info className="w-3.5 h-3.5" />
+          </span>
+        </div>
       </div>
 
+      {!pdfBytes && <EmptyDrawingDropzone />}
+
       {/* 중앙 캔버스 + SVG 산정선·근거 오버레이 영역 */}
-      <div className="flex-1 overflow-auto p-6 flex items-start justify-center bg-slate-200/70">
+      <div
+        className={`flex-1 overflow-auto p-6 flex items-start justify-center bg-slate-200/70 ${
+          pdfBytes ? "" : "hidden"
+        }`}
+      >
         <div
           className="relative bg-white shadow-lg border border-slate-300"
           style={{
@@ -1145,19 +1530,6 @@ export function CenterCanvasEditor() {
             )}
           </svg>
         </div>
-      </div>
-
-      {/* 하단 법적 고지 바 */}
-      <div className="bg-white border-t border-slate-200 px-3.5 py-1.5 text-[11px] text-slate-500 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-1.5">
-          <ShieldAlert className="w-3.5 h-3.5 text-slate-400" />
-          <span>
-            수동 경계는 사용자가 지정한 산정선입니다(벽 중심선·법정 산정선 자동 확정 아님). 단일 축척 보정은 심한 스캔 왜곡을 자동 복구하지 않습니다.
-          </span>
-        </div>
-        <span>
-          꼭짓점 드래그: 이동 · 변 중점 클릭: 꼭짓점 추가 · 꼭짓점 더블클릭: 삭제
-        </span>
       </div>
 
       {/* 모달 1: 작업 도면 영역 생성 */}

@@ -16,11 +16,6 @@ import {
   uploadBytes,
 } from "firebase/storage";
 import { getFirebaseClientServices } from "@/lib/firebase/client";
-import {
-  createInitialDemoWorkspaceBundle,
-  DEMO_VIRTUAL_PDF_HASH,
-  DEMO_VIRTUAL_PDF_URL,
-} from "@/lib/demo/fixture";
 import type {
   AreaZone,
   Building,
@@ -63,6 +58,8 @@ export class LiveFirebaseRepository implements StorageRepository {
 
     for (const d of snap.docs) {
       const project = d.data() as Project;
+      // 예제 프로젝트 기능 제거 이전에 생성된 가상 도면 예제는 목록에서 제외
+      if (project.isDemoProject) continue;
       const pid = project.id;
       const [docsSnap, candsSnap, zonesSnap, snapsSnap] = await Promise.all([
         getDocs(collection(this.db, "projects", pid, "documents")),
@@ -355,14 +352,6 @@ export class LiveFirebaseRepository implements StorageRepository {
     return bundle;
   }
 
-  async loadOrResetDemoProject(
-    ownerId: string
-  ): Promise<ProjectWorkspaceBundle> {
-    const demoBundle = createInitialDemoWorkspaceBundle(ownerId);
-    await this.saveProjectBundle(ownerId, demoBundle);
-    return demoBundle;
-  }
-
   async deleteProjectCompletely(
     ownerId: string,
     projectId: string
@@ -455,18 +444,6 @@ export class LiveFirebaseRepository implements StorageRepository {
     _ownerId: string,
     documentItem: DrawingDocument
   ): Promise<Uint8Array> {
-    if (
-      documentItem.isDemoFixturePdf ||
-      documentItem.documentHash === DEMO_VIRTUAL_PDF_HASH ||
-      documentItem.storagePath.startsWith("demo://")
-    ) {
-      const res = await fetch(DEMO_VIRTUAL_PDF_URL);
-      if (!res.ok) {
-        throw new Error("가상 데모 PDF를 불러오지 못했습니다.");
-      }
-      return new Uint8Array(await res.arrayBuffer());
-    }
-
     const ref = storageRef(this.storage, documentItem.storagePath);
     const buffer = await getBytes(ref, 20 * 1024 * 1024);
     return new Uint8Array(buffer);

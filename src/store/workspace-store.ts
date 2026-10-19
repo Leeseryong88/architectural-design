@@ -6,11 +6,6 @@ import {
   runProjectValidations,
 } from "@/lib/services/aggregation-validator";
 import {
-  buildDemoFixtureCandidates,
-  DEMO_PAGE_CLASSIFICATIONS,
-  DEMO_VIRTUAL_PDF_HASH,
-} from "@/lib/demo/fixture";
-import {
   extractPageTextAndPositions,
   MAX_ANALYSIS_SELECTED_PAGES,
   renderPageForAiAnalysis,
@@ -121,7 +116,7 @@ interface WorkspaceStoreState {
   ) => Promise<void>;
   togglePageForAnalysis: (pageIndex: number) => Promise<void>;
 
-  // AI 분석 / 데모 fixture 추출 실행 및 재시도
+  // AI 분석 실행 및 재시도
   runSelectedPagesExtraction: (
     getIdTokenFn?: () => Promise<string | null>,
     onlyPageIndices?: number[]
@@ -515,9 +510,6 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set, get) => ({
         inspected.bytes
       );
 
-      const isDemoFixturePdf =
-        inspected.documentHash === DEMO_VIRTUAL_PDF_HASH;
-
       const newDoc: DrawingDocument = {
         id: docId,
         ownerId,
@@ -529,7 +521,6 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set, get) => ({
         version: nextVersion,
         pageCount: inspected.pageCount,
         uploadedAt: now,
-        isDemoFixturePdf,
       };
 
       // 새 PDF는 새 문서 버전으로 관리하며 이전 근거와 산정선을 새 PDF에 자동 이식하지 않는다.
@@ -540,9 +531,7 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set, get) => ({
         documentId: docId,
         documentVersion: nextVersion,
         pageIndex: pm.pageIndex,
-        classification: isDemoFixturePdf
-          ? DEMO_PAGE_CLASSIFICATIONS[pm.pageIndex] ?? "unclassified"
-          : "unclassified",
+        classification: "unclassified",
         classificationModifiedByUser: false,
         selectedForAnalysis: pm.pageIndex <= MAX_ANALYSIS_SELECTED_PAGES,
         analysisStatus: "idle",
@@ -703,93 +692,11 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set, get) => ({
     const runId = `run-${Date.now()}`;
     const now = new Date().toISOString();
 
-    // デ모 모드 처리: 가상 도면 해시와 일치하는 경우에만 고정 데모 추출 fixture 적용
+    // 로컬(demo) 모드에서는 외부 AI를 호출하지 않으므로 수동 측정·직접 입력만 지원
     if (appMode === "demo") {
-      if (activeDoc.documentHash !== DEMO_VIRTUAL_PDF_HASH) {
-        set({
-          errorMessage:
-            "데모 모드에서 업로드한 사용자 임의 PDF에는 고정 예제 fixture를 적용하지 않습니다. 수동 면적 측정 및 직접 입력 기능은 즉시 사용할 수 있으며, 실제 Gemini AI 추출을 사용하려면 .env.local에서 NEXT_PUBLIC_APP_MODE=live 및 Firebase·Gemini 환경변수를 설정하세요.",
-        });
-        return;
-      }
-
-      const pageResults: ExtractionRun["pageResults"] = {};
-      for (const tp of targetPages) {
-        pageResults[tp.pageIndex] = {
-          pageIndex: tp.pageIndex,
-          status: "completed",
-          errorMessage: null,
-          startedAt: now,
-          completedAt: now,
-        };
-      }
-
-      const fixtureRun: ExtractionRun = {
-        id: runId,
-        ownerId,
-        projectId: bundle.project.id,
-        documentId: activeDoc.id,
-        documentVersion: activeDoc.version,
-        documentHash: activeDoc.documentHash,
-        modelId: "demo-fixture-preset",
-        promptVersion: "v1.0-demo-fixture",
-        status: "completed",
-        isDemoFixtureRun: true,
-        pageResults,
-        totalTokensUsed: null,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      const fixtureCandidates = buildDemoFixtureCandidates({
-        ownerId,
-        projectId: bundle.project.id,
-        documentId: activeDoc.id,
-        documentVersion: activeDoc.version,
-        runId,
-        pageIndices: targetPages.map((p) => p.pageIndex),
-      });
-
-      // 이미 사용자가 수정·확정한 후보나 공식 데이터는 덮어쓰지 않고 별도 실행 이력 후보로 추가
-      const existingConfirmedIds = new Set(
-        bundle.candidates
-          .filter((c) => c.reviewStatus !== "pending")
-          .map((c) => `${c.pageIndex}:${c.fieldKey}:${c.rawText}`)
-      );
-
-      const filteredNewCandidates = fixtureCandidates.filter(
-        (fc) =>
-          !existingConfirmedIds.has(
-            `${fc.pageIndex}:${fc.fieldKey}:${fc.rawText}`
-          )
-      );
-
-      const nextPages = bundle.pages.map((p) => {
-        if (!targetPages.some((tp) => tp.pageIndex === p.pageIndex)) return p;
-        return {
-          ...p,
-          classification: p.classificationModifiedByUser
-            ? p.classification
-            : DEMO_PAGE_CLASSIFICATIONS[p.pageIndex] ?? p.classification,
-          analysisStatus: "completed" as const,
-          analysisError: null,
-          updatedAt: now,
-        };
-      });
-
-      const recomputed = recomputeDerived({
-        ...bundle,
-        pages: nextPages,
-        runs: [fixtureRun, ...bundle.runs],
-        candidates: [...bundle.candidates, ...filteredNewCandidates],
-      });
-
-      await repo.saveProjectBundle(ownerId, recomputed.bundle);
       set({
-        bundle: recomputed.bundle,
-        aggregation: recomputed.aggregation,
-        validationIssues: recomputed.validationIssues,
-        autoSaveStatus: "saved",
+        errorMessage:
+          "로컬(데모) 모드에서는 AI 추출을 사용할 수 없습니다. 수동 면적 측정 및 직접 입력은 그대로 사용할 수 있으며, Gemini AI 추출을 사용하려면 .env.local에서 NEXT_PUBLIC_APP_MODE=live 및 Firebase·Gemini 환경변수를 설정하세요.",
       });
       return;
     }

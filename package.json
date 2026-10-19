@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "generate:demo": "node scripts/generate-demo-assets.mjs",
+    "setup:font": "node scripts/ensure-korean-font.mjs",
     "deploy:rules": "node --env-file=.env.local scripts/deploy-firebase-rules.mjs"
   },
   "dependencies": {
