@@ -1,0 +1,39 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // 1. 도면 PDF 원본 저장 경로 (20MB 이하, application/pdf 유형만 허용)
+    match /users/{uid}/projects/{projectId}/documents/{documentId}/{fileName} {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.size > 0
+        && request.resource.size <= 20 * 1024 * 1024
+        && request.resource.contentType == 'application/pdf';
+      allow delete: if isOwner(uid);
+    }
+
+    // 2. 확정본/스냅샷 엑셀(.xlsx) 및 검토용 PDF 출력 파일 경로 (25MB 이하)
+    match /users/{uid}/projects/{projectId}/snapshots/{snapshotId}/{fileName} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && request.resource.size > 0
+        && request.resource.size <= 25 * 1024 * 1024
+        && (
+          request.resource.contentType == 'application/pdf' ||
+          request.resource.contentType == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        );
+      allow update: if false; // 스냅샷 출력 파일은 불변 유지
+      allow delete: if isOwner(uid);
+    }
+
+    // 그 외 모든 경로 차단
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

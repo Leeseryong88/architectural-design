@@ -1,0 +1,60 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(ownerId) {
+      return isSignedIn() && request.auth.uid == ownerId;
+    }
+
+    function isProjectOwner(projectId) {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid;
+    }
+
+    // 1. 프로젝트 루트 문서
+    match /projects/{projectId} {
+      allow read: if isOwner(resource.data.ownerId);
+
+      // 생성 시: 반드시 본인의 uid가 ownerId여야 하며 필드 개수 제한
+      allow create: if isOwner(request.resource.data.ownerId)
+        && request.resource.data.keys().size() <= 30
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 200;
+
+      // 수정 시: 클라이언트의 ownerId 변경 금지
+      allow update: if isOwner(resource.data.ownerId)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.keys().size() <= 30;
+
+      allow delete: if isOwner(resource.data.ownerId);
+
+      // 2. 하위 컬렉션 (buildings, floors, documents, pages, regions, runs, candidates, zones)
+      match /{subcollection}/{docId} {
+        allow read: if isProjectOwner(projectId);
+
+        // snapshots(불변 확정본)는 생성 후 수정 불가
+        allow create: if isProjectOwner(projectId)
+          && request.resource.data.ownerId == request.auth.uid
+          && request.resource.data.projectId == projectId;
+
+        allow update: if isProjectOwner(projectId)
+          && subcollection != 'snapshots'
+          && request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.projectId == resource.data.projectId;
+
+        allow delete: if isProjectOwner(projectId);
+      }
+    }
+
+    // 3. 서버 전용 AI 호출 제한 및 동시성 슬롯 컬렉션 (클라이언트 임의 수정 차단)
+    match /userAiQuotas/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false; // 오직 서버(Firebase Admin SDK)에서만 트랜잭션으로 갱신
+    }
+  }
+}

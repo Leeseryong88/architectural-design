@@ -1,0 +1,4 @@
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+Font: NanumGothic (Copyright (c) 2010, NAVER Corporation (https://www.navercorp.com))
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+Permits bundling, embedding, and redistribution in web and PDF documents.
