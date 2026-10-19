@@ -9,9 +9,11 @@ import React, {
 } from "react";
 import {
   createUserWithEmailAndPassword,
+  GoogleAuthProvider,
   onAuthStateChanged,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
   type User,
 } from "firebase/auth";
@@ -27,6 +29,7 @@ interface AuthContextValue {
   authLoading: boolean;
   signInEmail: (email: string, password: string) => Promise<void>;
   signUpEmail: (email: string, password: string) => Promise<void>;
+  signInGoogle: () => Promise<void>;
   sendResetEmail: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   getIdToken: () => Promise<string | null>;
@@ -93,6 +96,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signUpEmail: async (email, password) => {
       const { auth } = getFirebaseClientServices();
       await createUserWithEmailAndPassword(auth, email, password);
+    },
+    signInGoogle: async () => {
+      const { auth } = getFirebaseClientServices();
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      await signInWithPopup(auth, provider);
     },
     sendResetEmail: async (email) => {
       const { auth } = getFirebaseClientServices();
