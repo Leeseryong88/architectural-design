@@ -1,4 +1,8 @@
-import * as polygonClipping from "polygon-clipping";
+import polygonClipping, {
+  type MultiPolygon,
+  type Polygon,
+  type Ring,
+} from "polygon-clipping";
 import type {
   AreaDeductionPolygon,
   BoundingBox,
@@ -189,8 +193,8 @@ export function isPolygonSelfIntersecting(points: Point2D[]): boolean {
 function pointsToClosedMetersRing(
   pointsPt: Point2D[],
   metersPerPdfPoint: number
-): polygonClipping.Ring {
-  const ring: polygonClipping.Ring = pointsPt.map((p) => [
+): Ring {
+  const ring: Ring = pointsPt.map((p) => [
     p.x * metersPerPdfPoint,
     p.y * metersPerPdfPoint,
   ]);
@@ -209,7 +213,7 @@ function pointsToClosedMetersRing(
  * 각 Polygon은 [외곽 링, ...내부 홀 링]으로 구성됨
  */
 export function calculateMultiPolygonAreaSqm(
-  multiPoly: polygonClipping.MultiPolygon
+  multiPoly: MultiPolygon
 ): number {
   let totalArea = 0;
   for (const poly of multiPoly) {
@@ -270,12 +274,12 @@ export function evaluateZoneGeometry(
     };
   }
 
-  const outerPoly: polygonClipping.Polygon = [
+  const outerPoly: Polygon = [
     pointsToClosedMetersRing(outerPolygonPt, metersPerPdfPoint),
   ];
   const grossAreaSqm = calculateMultiPolygonAreaSqm([outerPoly]);
 
-  const validDeductionPolys: { id: string; poly: polygonClipping.Polygon }[] = [];
+  const validDeductionPolys: { id: string; poly: Polygon }[] = [];
   const deductionsOutsideOuterIds: string[] = [];
 
   for (const d of deductionsPt) {
@@ -285,7 +289,7 @@ export function evaluateZoneGeometry(
     ) {
       continue;
     }
-    const dPoly: polygonClipping.Polygon = [
+    const dPoly: Polygon = [
       pointsToClosedMetersRing(d.pointsPt, metersPerPdfPoint),
     ];
 
@@ -373,10 +377,10 @@ export function calculateOverlapAreaBetweenPolygonsSqm(
     return 0;
   }
   try {
-    const geomA: polygonClipping.Polygon = [
+    const geomA: Polygon = [
       pointsToClosedMetersRing(polyAPt, metersPerPdfPoint),
     ];
-    const geomB: polygonClipping.Polygon = [
+    const geomB: Polygon = [
       pointsToClosedMetersRing(polyBPt, metersPerPdfPoint),
     ];
     const inter = polygonClipping.intersection(geomA, geomB);
@@ -402,13 +406,13 @@ export function calculateUnaccountedEnvelopeAreaSqm(
     return 0;
   }
   try {
-    const envGeom: polygonClipping.Polygon = [
+    const envGeom: Polygon = [
       pointsToClosedMetersRing(envelopePt, metersPerPdfPoint),
     ];
     const validZones = zonePolygonsPt
       .filter((pts) => pts.length >= 3 && !isPolygonSelfIntersecting(pts))
       .map(
-        (pts): polygonClipping.Polygon => [
+        (pts): Polygon => [
           pointsToClosedMetersRing(pts, metersPerPdfPoint),
         ]
       );

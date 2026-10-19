@@ -305,23 +305,23 @@ export function ExportAndSnapshotTab() {
         </h2>
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
-          {[
-            ["overview", "1. 프로젝트 개요 시트"],
-            ["zoneDetails", "2. 구역별 산출내역 시트"],
-            ["floorUsageSummary", "3. 층별·용도별 집계 (세움터 참고표)"],
-            ["buildingSummary", "4. 동별 집계 시트"],
-            ["adjustmentBasis", "5. 제외·조정 근거 시트"],
-            ["validationItems", "6. 검토 필요 항목 시트"],
-          ].map(([key, label]) => (
+          {(
+            [
+              ["overview", "1. 프로젝트 개요 시트"],
+              ["zoneDetails", "2. 구역별 산출내역 시트"],
+              ["floorUsageSummary", "3. 층별·용도별 집계 (세움터 참고표)"],
+              ["buildingSummary", "4. 동별 집계 시트"],
+              ["adjustmentBasis", "5. 제외·조정 근거 시트"],
+              ["validationItems", "6. 검토 필요 항목 시트"],
+            ] as const
+          ).map(([key, label]) => (
             <label
               key={key}
               className="flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 bg-slate-50 cursor-pointer"
             >
               <input
                 type="checkbox"
-                checked={
-                  includeSections[key as keyof typeof includeSections] ?? true
-                }
+                checked={includeSections[key] ?? true}
                 onChange={(e) =>
                   setIncludeSections({
                     ...includeSections,

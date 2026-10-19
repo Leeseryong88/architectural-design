@@ -9,4 +9,13 @@ declare module "polygon-clipping" {
   export function difference(subjectGeom: Geom, ...clipGeoms: Geom[]): MultiPolygon;
   export function intersection(geom: Geom, ...moreGeoms: Geom[]): MultiPolygon;
   export function xor(geom: Geom, ...moreGeoms: Geom[]): MultiPolygon;
+
+  const polygonClipping: {
+    union: typeof union;
+    difference: typeof difference;
+    intersection: typeof intersection;
+    xor: typeof xor;
+  };
+
+  export default polygonClipping;
 }
