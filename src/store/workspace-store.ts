@@ -296,11 +296,16 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set, get) => ({
         bundle.documents[bundle.documents.length - 1] ??
         null;
 
+      let pdfLoadError: string | null = null;
       if (activeDoc) {
         try {
           pdfBytes = await repo.loadPdfBytes(ownerId, activeDoc);
-        } catch {
+        } catch (err: unknown) {
           pdfBytes = null;
+          pdfLoadError =
+            err instanceof Error
+              ? err.message
+              : "도면 PDF를 불러오지 못했습니다.";
         }
       }
 
@@ -317,6 +322,7 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set, get) => ({
         isLoading: false,
         autoSaveStatus: "saved",
         hasUnsavedChanges: false,
+        errorMessage: pdfLoadError,
       });
     } catch (err: unknown) {
       set({
@@ -732,7 +738,7 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set, get) => ({
       documentVersion: activeDoc.version,
       documentHash: activeDoc.documentHash,
       modelId: "gemini-live",
-      promptVersion: "v1.2-arch-kr-strict",
+      promptVersion: "v1.3-room-stated-area",
       status: "running",
       isDemoFixtureRun: false,
       pageResults: initialPageResults,
@@ -824,6 +830,7 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set, get) => ({
         currentRun = {
           ...currentRun,
           modelId: payload.modelId || currentRun.modelId,
+          promptVersion: payload.promptVersion || currentRun.promptVersion,
           totalTokensUsed: accumulatedTokens,
           pageResults: {
             ...currentRun.pageResults,
@@ -1036,8 +1043,10 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set, get) => ({
             nextBuilding.floorsBelowGround = Math.round(numVal);
           }
           break;
+        case "room_stated_area":
         case "floor_area_entry": {
           if (!Number.isNaN(numVal)) {
+            const isRoomArea = cand.fieldKey === "room_stated_area";
             const matchedFloor =
               nextFloors.find((f) => f.id === targetFloorId) ??
               nextFloors.find(
@@ -1047,7 +1056,7 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set, get) => ({
               ) ??
               nextFloors[0];
 
-            if (cand.rowType === "subtotal" && matchedFloor) {
+            if (!isRoomArea && cand.rowType === "subtotal" && matchedFloor) {
               nextFloors = nextFloors.map((f) =>
                 f.id === matchedFloor.id
                   ? { ...f, statedFloorArea: numVal, updatedAt: now }
@@ -1065,6 +1074,12 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set, get) => ({
                 const ez = nextZones[existingZoneIdx]!;
                 nextZones[existingZoneIdx] = {
                   ...ez,
+                  name: isRoomArea
+                    ? cand.usageLabel || ez.name
+                    : ez.name,
+                  usage: isRoomArea
+                    ? cand.usageLabel || ez.usage
+                    : ez.usage,
                   statedAreaSqm: numVal,
                   reviewStatus: "confirmed",
                   updatedAt: now,
@@ -1080,9 +1095,11 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set, get) => ({
                   floorId: matchedFloor.id,
                   name:
                     cand.usageLabel ||
-                    `${matchedFloor.label} 기재 구역`,
+                    (isRoomArea
+                      ? "기재 실"
+                      : `${matchedFloor.label} 기재 구역`),
                   usage: cand.usageLabel || matchedFloor.mainUse || "근린생활시설",
-                  rowType: cand.rowType,
+                  rowType: isRoomArea ? "detail" : cand.rowType,
                   basisType: "stated",
                   linkedCandidateId: cand.id,
                   sourceDocumentId: cand.documentId,

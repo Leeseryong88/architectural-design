@@ -352,6 +352,7 @@ export function runProjectValidations(params: {
       "floors_above_ground",
       "floors_below_ground",
       "floor_area_entry",
+      "room_stated_area",
     ]);
     if (
       cand.reviewStatus !== "rejected" &&

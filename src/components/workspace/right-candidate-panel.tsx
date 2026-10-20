@@ -653,6 +653,9 @@ export function RightCandidatePanel({ onClose }: { onClose?: () => void }) {
                 <div className="flex items-center justify-between gap-1.5">
                   <span className="font-semibold text-slate-600 truncate">
                     {CANDIDATE_FIELD_LABELS[cand.fieldKey]}
+                    {cand.fieldKey === "room_stated_area" && cand.usageLabel && (
+                      <span className="text-slate-800"> · {cand.usageLabel}</span>
+                    )}
                     {cand.floorLabel && (
                       <span className="text-slate-400"> · {cand.floorLabel}</span>
                     )}
@@ -731,7 +734,8 @@ export function RightCandidatePanel({ onClose }: { onClose?: () => void }) {
                         className="w-full px-2.5 py-1 text-xs border border-blue-300 rounded bg-white"
                       />
                     </div>
-                    {cand.fieldKey === "floor_area_entry" && (
+                    {(cand.fieldKey === "floor_area_entry" ||
+                      cand.fieldKey === "room_stated_area") && (
                       <div>
                         <label className="block text-[10px] font-semibold text-blue-900 mb-1">
                           적용 대상 층

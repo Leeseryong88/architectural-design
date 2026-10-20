@@ -33,10 +33,15 @@ export function getFirebaseClientServices(): {
       getApps().length > 0 ? getApp() : initializeApp(env.firebaseConfig);
   }
 
+  const storage = getStorage(cachedApp);
+  // 기본값은 다운로드 실패를 2분간 재시도한다. CORS·404처럼 바로 실패하는 요청이 콘솔에 반복되지 않게 줄인다.
+  storage.maxOperationRetryTime = 8_000;
+  storage.maxUploadRetryTime = 20_000;
+
   return {
     app: cachedApp,
     auth: getAuth(cachedApp),
     db: getFirestore(cachedApp),
-    storage: getStorage(cachedApp),
+    storage,
   };
 }

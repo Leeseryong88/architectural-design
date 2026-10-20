@@ -31,6 +31,32 @@ import type {
 } from "@/types/domain";
 import type { ProjectSummaryCard, StorageRepository } from "./types";
 
+function toStorageReadError(err: unknown, label: string): Error {
+  const code =
+    typeof err === "object" && err !== null && "code" in err
+      ? String((err as { code: unknown }).code)
+      : "";
+  if (code.includes("object-not-found")) {
+    return new Error(
+      `${label} 파일을 Storage에서 찾을 수 없습니다. 도면을 다시 업로드하세요.`
+    );
+  }
+  if (code.includes("unauthorized") || code.includes("unauthenticated")) {
+    return new Error(`${label} 파일에 접근할 권한이 없습니다. 다시 로그인해 주세요.`);
+  }
+  const message = err instanceof Error ? err.message : "";
+  if (
+    message.includes("CORS") ||
+    message.includes("access control") ||
+    code.includes("unknown")
+  ) {
+    return new Error(
+      `${label} 파일을 브라우저에서 읽지 못했습니다. Storage 버킷 CORS 허용이 필요합니다.`
+    );
+  }
+  return new Error(message || `${label} 파일을 불러오지 못했습니다.`);
+}
+
 /**
  * 실제 모드(live)용 Firestore + Firebase Storage 저장 어댑터
  * 요구사항 13:
@@ -444,9 +470,21 @@ export class LiveFirebaseRepository implements StorageRepository {
     _ownerId: string,
     documentItem: DrawingDocument
   ): Promise<Uint8Array> {
+    if (
+      !documentItem.storagePath ||
+      documentItem.storagePath.startsWith("demo://")
+    ) {
+      throw new Error(
+        "이 도면 파일은 Storage에 없습니다. PDF를 다시 업로드하세요."
+      );
+    }
     const ref = storageRef(this.storage, documentItem.storagePath);
-    const buffer = await getBytes(ref, 20 * 1024 * 1024);
-    return new Uint8Array(buffer);
+    try {
+      const buffer = await getBytes(ref, 20 * 1024 * 1024);
+      return new Uint8Array(buffer);
+    } catch (err: unknown) {
+      throw toStorageReadError(err, "도면 PDF");
+    }
   }
 
   async saveSnapshotExportFile(
@@ -477,9 +515,16 @@ export class LiveFirebaseRepository implements StorageRepository {
     _ownerId: string,
     path: string
   ): Promise<Uint8Array | null> {
+    if (!path || path.startsWith("demo://")) {
+      return null;
+    }
     const ref = storageRef(this.storage, path);
-    const buf = await getBytes(ref, 25 * 1024 * 1024);
-    return new Uint8Array(buf);
+    try {
+      const buf = await getBytes(ref, 25 * 1024 * 1024);
+      return new Uint8Array(buf);
+    } catch (err: unknown) {
+      throw toStorageReadError(err, "출력 파일");
+    }
   }
 
   async saveProjectAndBuilding(

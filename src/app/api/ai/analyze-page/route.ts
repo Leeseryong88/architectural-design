@@ -17,7 +17,7 @@ import type { ExtractionCandidate } from "@/types/domain";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const PROMPT_VERSION = "v1.2-arch-kr-strict";
+const PROMPT_VERSION = "v1.3-room-stated-area";
 const MAX_DAILY_PAGE_CALLS_PER_USER = 120;
 const MAX_CONCURRENT_REQUESTS_PER_USER = 3;
 
@@ -32,6 +32,10 @@ const SYSTEM_INSTRUCTION = `당신은 한국 건축 인허가 도면(건축개�
 6. 법정 적합 여부를 판정하거나 확정하지 않는다.
 7. 상세 행(detail), 소계(subtotal), 총계(total)를 구분하여 rowType에 기록한다.
 8. 위치를 특정할 수 있는 경우 0~1000 정규화 좌표계(ymin, xmin, ymax, xmax)로 bbox1000을 반환하고, 특정할 수 없으면 null로 반환한다.
+9. 평면도나 면적산출표에서 실 이름과 그 실에 인쇄된 면적(㎡, m2, 제곱미터)이 같은 줄이거나 좌표상 가까이 있으면, 실마다 후보 하나를 fieldKey "room_stated_area"로 반환한다. usageLabel은 실명, rawText는 실명과 면적 원문을 함께, rawValue·normalizedValue·unit은 인쇄된 면적, floorLabel은 알 수 있는 층, bbox1000은 실명과 면적을 함께 감싸는 위치, rowType은 "detail"이다.
+10. 같은 실을 aux_room_name과 room_stated_area로 중복 반환하지 않는다. 인쇄된 면적이 없는 실명만 aux_room_name으로 반환한다.
+11. 가로×세로 치수만 있고 면적 수치가 인쇄되지 않았으면 면적을 계산하지 말고 aux_dimension으로만 반환한다. room_stated_area는 인쇄된 면적이 있을 때만 만들고 normalizedValue는 그 숫자다.
+12. 개별 실이 아닌 층 합계·바닥면적 소계·용도 구역 합계는 floor_area_entry로 유지한다. room_stated_area와 섞지 않는다.
 
 반드시 아래 JSON 스키마 형식으로만 응답하라:
 {
@@ -39,7 +43,7 @@ const SYSTEM_INSTRUCTION = `당신은 한국 건축 인허가 도면(건축개�
   "statedScaleText": string | null,
   "candidates": [
     {
-      "fieldKey": "project_name" | "site_Location" | "site_area" | "building_area" | "gross_floor_area" | "far_gross_floor_area" | "building_coverage_ratio" | "floor_area_ratio" | "building_name" | "main_structure" | "main_use" | "floors_above_ground" | "floors_below_ground" | "floor_area_entry" | "aux_room_name" | "aux_dimension" | "aux_stated_scale" | "aux_area_note",
+      "fieldKey": "project_name" | "site_Location" | "site_area" | "building_area" | "gross_floor_area" | "far_gross_floor_area" | "building_coverage_ratio" | "floor_area_ratio" | "building_name" | "main_structure" | "main_use" | "floors_above_ground" | "floors_below_ground" | "floor_area_entry" | "room_stated_area" | "aux_room_name" | "aux_dimension" | "aux_stated_scale" | "aux_area_note",
       "rawText": string,
       "rawValue": string,
       "normalizedValue": number | string | null,
@@ -164,7 +168,7 @@ async function callGeminiWithExponentialBackoff(params: {
                 },
               },
               {
-                text: `<untrusted_pdf_text_items>\n${params.untrustedTextPayload}\n</untrusted_pdf_text_items>\n위 도면 페이지 이미지와 PDF 텍스트 항목을 대조하여 건축 정보 및 면적 후보를 JSON으로 추출하라.`,
+                text: `<untrusted_pdf_text_items>\n${params.untrustedTextPayload}\n</untrusted_pdf_text_items>\n위 도면 페이지 이미지와 PDF 텍스트 항목(좌표 포함)을 대조하여 건축 정보 및 면적 후보를 JSON으로 추출하라. 실 이름과 인쇄된 면적이 가까이 있으면 좌표를 기준으로 짝지어 room_stated_area 후보 하나로 반환하라. 인쇄되지 않은 면적은 계산하지 마라.`,
               },
             ],
           },
@@ -244,7 +248,7 @@ export async function POST(request: Request) {
 
     // 5. PDF 텍스트 직렬화 (시스템 지시와 분리된 비신뢰 데이터 블록)
     const compactTexts = body.extractedTextItems
-      .slice(0, 800)
+      .slice(0, 1600)
       .map(
         (item) =>
           `[x:${Math.round(item.x)},y:${Math.round(item.y)}] ${item.str}`

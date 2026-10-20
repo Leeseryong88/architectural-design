@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "setup:font": "node scripts/ensure-korean-font.mjs",
-    "deploy:rules": "node --env-file=.env.local scripts/deploy-firebase-rules.mjs"
+    "deploy:rules": "node --env-file=.env.local scripts/deploy-firebase-rules.mjs",
+    "configure:storage-cors": "node --env-file=.env.local scripts/configure-storage-cors.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.0.0",
